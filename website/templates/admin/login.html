@@ -1,0 +1,64 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="container" style="max-width: 420px; margin-top: 4rem;">
+  <div class="card p-4 shadow-sm">
+    <h3 class="text-center mb-3">Admin PIN Required</h3>
+
+    <p class="text-muted text-center">
+      Enter an authorized PIN to access admin pages.
+    </p>
+
+    <div class="mb-3">
+      <label class="form-label">PIN</label>
+      <input id="adminPinInput" type="password" class="form-control" autofocus>
+    </div>
+
+    <button class="btn btn-primary w-100" onclick="submitAdminPin()">
+      Unlock Admin
+    </button>
+
+    <button class="btn btn-secondary w-100 mt-2" onclick="window.location.href='/pos'">
+      Back to POS
+    </button>
+  </div>
+</div>
+
+<script>
+const nextUrl = "{{ next_url }}";
+
+function submitAdminPin() {
+  const pin = document.getElementById('adminPinInput').value.trim();
+
+  if (!pin) {
+    alert("Enter a PIN.");
+    return;
+  }
+
+  fetch('/admin/login?next=' + encodeURIComponent(nextUrl), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ pin })
+  })
+  .then(r => r.json().then(data => ({ ok: r.ok, data })))
+  .then(({ ok, data }) => {
+    if (!ok || !data.ok) {
+      alert(data.error || "Incorrect PIN.");
+      return;
+    }
+
+    window.location.href = data.next || "/admin/tools";
+  })
+  .catch(err => {
+    alert("Could not validate PIN: " + err);
+  });
+}
+
+document.getElementById('adminPinInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    submitAdminPin();
+  }
+});
+</script>
+
+{% endblock %}

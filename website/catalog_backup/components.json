@@ -1,0 +1,107 @@
+[
+  {
+    "id": 1,
+    "name": "Small Pastry",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 2,
+    "name": "Foam Cups 8oz",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 3,
+    "name": "Foam Cups 12oz",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 4,
+    "name": "Large Pastry",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 5,
+    "name": "Coffee Stirrers",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 0
+  },
+  {
+    "id": 6,
+    "name": "Belvita Crackers",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 7,
+    "name": "Chex Mix",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 8,
+    "name": "Jerky Stick",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 9,
+    "name": "Cookie",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 10,
+    "name": "Compostable Plates",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 0
+  },
+  {
+    "id": 11,
+    "name": "Lids 12oz",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 0
+  },
+  {
+    "id": 12,
+    "name": "Lids 8oz",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 0
+  },
+  {
+    "id": 13,
+    "name": "Bigelow Tea",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 14,
+    "name": "Hot Chocolate",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 1
+  },
+  {
+    "id": 15,
+    "name": "Napkins",
+    "qty_used": 0.0,
+    "unit_cost": 0.0,
+    "pos_track_sellout": 0
+  }
+]

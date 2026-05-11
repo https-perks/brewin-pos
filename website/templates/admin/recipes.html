@@ -1,0 +1,306 @@
+{% extends "layout.html" %}
+{% block content %}
+{% include 'admin/_subnav.html' %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="m-0">Manage Recipes</h2>
+  <button id="toggleEdit" class="btn btn-secondary btn-sm" onclick="toggleEditMode()">✏️ Edit Mode</button>
+</div>
+
+<div class="card p-3 mb-4 shadow-sm">
+  <h5>Add Recipe Component</h5>
+
+  <form id="add-recipe-form" onsubmit="addRecipe(); return false;">
+    <div class="row g-2">
+      <div class="col-md-4">
+        <label class="form-label">Item</label>
+        <select id="itemSelect" class="form-select">
+          <option value="">Select Item...</option>
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Component</label>
+        <select id="componentSelect" class="form-select">
+          <option value="">Select Component...</option>
+        </select>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label">Qty per Item</label>
+        <input id="qty" type="number" step="0.01" min="0.01" value="1" class="form-control" placeholder="Qty/Item">
+      </div>
+
+      <div class="col-md-2 d-flex align-items-end">
+        <button class="btn btn-primary w-100">Add Recipe</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<hr>
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h5 class="m-0">Recipe List</h5>
+  <input id="recipeSearch"
+         class="form-control form-control-sm"
+         style="max-width: 280px;"
+         placeholder="Search item or component..."
+         oninput="loadRecipes()">
+</div>
+
+<div id="recipe-list"></div>
+
+<br>
+<br>
+
+<script>
+let editMode = false;
+
+function toggleEditMode(){
+  editMode = !editMode;
+  document.getElementById('toggleEdit').innerText = editMode ? '✅ Done Editing' : '✏️ Edit Mode';
+  loadRecipes();
+}
+
+function fmtMoney(x) {
+  return `$${Number(x || 0).toFixed(2)}`;
+}
+
+function fmtQty(x) {
+  return Number(x || 0).toFixed(2).replace(/\.00$/, '');
+}
+
+function safeId(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function loadRecipes(){
+  fetch('/api/admin/get_recipes')
+    .then(r => r.json())
+    .then(rows => {
+      const search = (document.getElementById('recipeSearch')?.value || '').toLowerCase();
+
+      const grouped = {};
+
+      rows.forEach(r => {
+        const itemName = r.item_name || 'Unknown Item';
+        const componentName = r.component_name || '';
+
+        const matchesSearch =
+          !search ||
+          itemName.toLowerCase().includes(search) ||
+          componentName.toLowerCase().includes(search);
+
+        if (!matchesSearch) return;
+
+        if (!grouped[itemName]) {
+          grouped[itemName] = [];
+        }
+
+        grouped[itemName].push(r);
+      });
+
+      const itemNames = Object.keys(grouped).sort();
+
+      if (itemNames.length === 0) {
+        document.getElementById('recipe-list').innerHTML = `
+          <div class="card p-3 text-muted">
+            No recipes found.
+          </div>
+        `;
+        return;
+      }
+
+      let html = `<div class="accordion" id="recipeAccordion">`;
+
+      itemNames.forEach((itemName, index) => {
+        const recipeRows = grouped[itemName];
+        const collapseId = `recipe-${safeId(itemName)}-${index}`;
+        const headingId = `heading-${safeId(itemName)}-${index}`;
+
+        const itemCost = recipeRows.reduce((t, r) => {
+          return t + Number(r.line_cost || 0);
+        }, 0);
+
+        const missingCosts = recipeRows.filter(r => Number(r.unit_cost || 0) <= 0).length;
+
+        html += `
+          <div class="accordion-item mb-2 shadow-sm rounded overflow-hidden">
+            <h2 class="accordion-header" id="${headingId}">
+              <button class="accordion-button collapsed d-flex justify-content-between"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#${collapseId}"
+                      aria-expanded="false"
+                      aria-controls="${collapseId}">
+
+                <div class="d-flex justify-content-between align-items-center w-100 pe-3">
+                  <div>
+                    <strong>${itemName}</strong>
+                    <span class="text-muted small ms-2">
+                      ${recipeRows.length} component${recipeRows.length === 1 ? '' : 's'}
+                    </span>
+
+                    ${
+                      missingCosts > 0
+                        ? `<span class="badge bg-warning text-dark ms-2">${missingCosts} missing cost</span>`
+                        : ''
+                    }
+                  </div>
+
+                  <div class="text-end">
+                    <span class="text-muted small">Item Cost</span>
+                    <strong class="ms-2">${fmtMoney(itemCost)}</strong>
+                  </div>
+                </div>
+              </button>
+            </h2>
+
+            <div id="${collapseId}"
+                 class="accordion-collapse collapse"
+                 aria-labelledby="${headingId}"
+                 data-bs-parent="#recipeAccordion">
+
+              <div class="accordion-body p-0">
+                <table class="table table-sm table-striped mb-0 align-middle">
+                  <thead>
+                    <tr>
+                      <th>Component</th>
+                      <th class="text-end" style="width: 140px;">Qty/Item</th>
+                      <th class="text-end" style="width: 140px;">Unit Cost</th>
+                      <th class="text-end" style="width: 140px;">Line Cost</th>
+                      ${editMode ? '<th class="text-end" style="width: 120px;">Actions</th>' : ''}
+                    </tr>
+                  </thead>
+                  <tbody>
+        `;
+
+        recipeRows.forEach(r => {
+          const unitCost = Number(r.unit_cost || 0);
+          const lineCost = Number(r.line_cost || 0);
+          const costClass = unitCost <= 0 ? 'text-danger fw-bold' : '';
+
+          if (editMode) {
+            html += `
+              <tr>
+                <td>${r.component_name}</td>
+                <td class="text-end">
+                  <input type="number"
+                         step="0.01"
+                         min="0.01"
+                         class="form-control form-control-sm text-end"
+                         id="qty-${r.id}"
+                         value="${r.qty_per_item}">
+                </td>
+                <td class="text-end ${costClass}">${fmtMoney(unitCost)}</td>
+                <td class="text-end ${costClass}">${fmtMoney(lineCost)}</td>
+                <td class="text-end">
+                  <button class="btn btn-sm btn-success" onclick="saveRecipe(${r.id})">💾</button>
+                  <button class="btn btn-sm btn-danger" onclick="deleteRecipe(${r.id})">🗑️</button>
+                </td>
+              </tr>
+            `;
+          } else {
+            html += `
+              <tr>
+                <td>${r.component_name}</td>
+                <td class="text-end">${fmtQty(r.qty_per_item)}</td>
+                <td class="text-end ${costClass}">${fmtMoney(unitCost)}</td>
+                <td class="text-end ${costClass}">${fmtMoney(lineCost)}</td>
+              </tr>
+            `;
+          }
+        });
+
+        html += `
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th colspan="3" class="text-end">Total Item Cost</th>
+                      <th class="text-end">${fmtMoney(itemCost)}</th>
+                      ${editMode ? '<th></th>' : ''}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div>`;
+
+      document.getElementById('recipe-list').innerHTML = html;
+    });
+}
+
+function populateDropdowns(){
+  Promise.all([
+    fetch('/api/admin/get_items').then(r=>r.json()),
+    fetch('/api/admin/get_components').then(r=>r.json())
+  ]).then(([items, comps])=>{
+    const itemSelect = document.getElementById('itemSelect');
+    const compSelect = document.getElementById('componentSelect');
+    itemSelect.innerHTML = '<option value="">Select Item...</option>';
+    compSelect.innerHTML = '<option value="">Select Component...</option>';
+
+    items.forEach(it=>{
+      itemSelect.innerHTML += `<option value="${it.sku}">${it.sku} — ${it.name}</option>`;
+    });
+    comps.forEach(c => {
+      const label = c.display_name && c.display_name !== c.name
+        ? `${c.name} — ${c.display_name}`
+        : c.name;
+
+      compSelect.innerHTML += `<option value="${c.id}">${label}</option>`;
+    });
+  });
+}
+
+function addRecipe(){
+  const item = document.getElementById('itemSelect').value;
+  const comp = document.getElementById('componentSelect').value;
+  const qty = parseFloat(document.getElementById('qty').value || 0);
+
+  if(!item || !comp){
+    alert("Select both item and component.");
+    return;
+  }
+
+  fetch('/api/admin/add_recipe',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      item_key: item,
+      component_id: comp,
+      qty_per_item: qty
+    })
+  }).then(()=>{ loadRecipes(); populateDropdowns(); });
+}
+
+function saveRecipe(id){
+  const payload = { id, qty_per_item: parseFloat(document.getElementById('qty-'+id).value||1) };
+  fetch('/api/admin/update_recipe',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  }).then(()=>loadRecipes());
+}
+
+function deleteRecipe(id){
+  if(!confirm('Delete this recipe?')) return;
+  fetch('/api/admin/delete_recipe',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:id})
+  }).then(()=>loadRecipes());
+}
+
+populateDropdowns();
+loadRecipes();
+</script>
+{% endblock %}

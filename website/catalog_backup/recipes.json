@@ -1,0 +1,146 @@
+[
+  {
+    "id": 1,
+    "item_id": 9,
+    "component_id": 6,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 2,
+    "item_id": 7,
+    "component_id": 7,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 3,
+    "item_id": 10,
+    "component_id": 9,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 4,
+    "item_id": 8,
+    "component_id": 8,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 5,
+    "item_id": 1,
+    "component_id": 2,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 6,
+    "item_id": 1,
+    "component_id": 12,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 7,
+    "item_id": 1,
+    "component_id": 5,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 8,
+    "item_id": 2,
+    "component_id": 3,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 9,
+    "item_id": 2,
+    "component_id": 11,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 10,
+    "item_id": 2,
+    "component_id": 5,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 11,
+    "item_id": 4,
+    "component_id": 2,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 12,
+    "item_id": 4,
+    "component_id": 12,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 13,
+    "item_id": 4,
+    "component_id": 5,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 14,
+    "item_id": 4,
+    "component_id": 14,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 15,
+    "item_id": 3,
+    "component_id": 13,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 16,
+    "item_id": 3,
+    "component_id": 3,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 17,
+    "item_id": 3,
+    "component_id": 11,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 18,
+    "item_id": 3,
+    "component_id": 5,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 19,
+    "item_id": 6,
+    "component_id": 10,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 20,
+    "item_id": 6,
+    "component_id": 4,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 21,
+    "item_id": 5,
+    "component_id": 1,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 22,
+    "item_id": 5,
+    "component_id": 10,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 23,
+    "item_id": 6,
+    "component_id": 15,
+    "qty_per_item": 1.0
+  },
+  {
+    "id": 24,
+    "item_id": 5,
+    "component_id": 15,
+    "qty_per_item": 1.0
+  }
+]

@@ -1,0 +1,70 @@
+{% extends "layout.html" %}
+{% block content %}
+{% include 'admin/_subnav.html' %}
+
+<h2 class="text-center mb-3">Shift Summary Reports</h2>
+
+<div class="d-flex justify-content-center gap-2 mb-3">
+  <input type="date" id="start" class="form-control" style="max-width:200px">
+  <input type="date" id="end" class="form-control" style="max-width:200px">
+  <button class="btn btn-primary" onclick="loadShifts()">Filter</button>
+  <button class="btn btn-secondary" onclick="window.print()">🖨️ Print</button>
+</div>
+
+<table id="shift-table">
+  <thead class="text-center">
+    <tr>
+      <th>Date</th>
+      <th>Cashier</th>
+      <th>Opening Float</th>
+      <th>Closing Amount</th>
+      <th>Net Change</th>
+      <th>Over / Short</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<br>
+<br>
+<script>
+async function loadShifts() {
+  const start = document.getElementById('start').value;
+  const end = document.getElementById('end').value;
+  const url = `/api/admin/get_shifts${start && end ? `?start=${start}&end=${end}` : ''}`;
+
+  const res = await fetch(url);
+  const data = await res.json();
+
+  const tbody = document.querySelector('#shift-table tbody');
+  tbody.innerHTML = '';
+
+  data.forEach(s => {
+    const tr = document.createElement('tr');
+    const status = s.is_active ? '🟢 Active' : '⚫ Closed';
+    const overShortColor = s.over_short > 0 ? 'text-success' :
+                           s.over_short < 0 ? 'text-danger' : 'text-muted';
+    tr.innerHTML = `
+      <td>${s.date}</td>
+      <td>${s.cashier}</td>
+      <td>$${(s.opening_float ?? 0).toFixed(2)}</td>
+      <td>${s.closing_amount != null ? `$${s.closing_amount.toFixed(2)}` : '-'}</td>
+      <td>$${(s.net_change ?? 0).toFixed(2)}</td>
+      <td class="${overShortColor}">$${(s.over_short ?? 0).toFixed(2)}</td>
+      <td>${status}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+document.addEventListener('DOMContentLoaded', loadShifts);
+</script>
+
+<style>
+@media print {
+  button, input, .d-flex { display: none !important; }
+  body { background: white !important; color: black; }
+  table { border: 1px solid black; }
+}
+</style>
+
+{% endblock %}

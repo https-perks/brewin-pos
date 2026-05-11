@@ -1,0 +1,907 @@
+{% extends "layout.html" %}
+{% block content %}
+{% include 'admin/_subnav.html' %}
+
+<h2>Admin Tools</h2>
+
+<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exportModal">
+  📦 Export Database
+</button>
+<button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#restoreModal">
+  ♻️ Restore Database
+</button>
+<button class="btn btn-secondary" onclick="openExportsFolder()">
+  📁 View Exports Folder
+</button>
+<br>
+<br>
+
+<!-- POS Settings Card -->
+<div class="card p-3 mb-4">
+  <h4>POS Settings</h4>
+
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" id="requirePinDiscounts">
+    <label class="form-check-label" for="requirePinDiscounts">
+      Require PIN for discounts
+    </label>
+  </div>
+
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" id="requirePinAdminAccess">
+    <label class="form-check-label" for="requirePinAdminAccess">
+      Require PIN to access Admin pages
+    </label>
+  </div>
+
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" id="requirePinExitProgram">
+    <label class="form-check-label" for="requirePinExitProgram">
+      Require PIN to exit program
+    </label>
+  </div>
+
+  <button class="btn btn-success mb-3" onclick="saveSettings()">Save Settings</button>
+
+  <hr>
+
+  <h5>Admin PINs</h5>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md-5">
+      <input id="pinLabel" class="form-control" placeholder="Label, e.g. Manager PIN">
+    </div>
+    <div class="col-md-4">
+      <input id="pinValue" class="form-control" placeholder="PIN" type="password">
+    </div>
+    <div class="col-md-3">
+      <button class="btn btn-primary w-100" onclick="addPin()">Add PIN</button>
+    </div>
+  </div>
+
+  <table class="table table-sm table-striped">
+    <thead>
+      <tr>
+        <th>Label</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="pinsTable"></tbody>
+  </table>
+</div>
+
+<div class="card p-3 mb-4">
+  <h4>Sales / Promotions</h4>
+
+  <input type="hidden" id="saleId">
+
+  <div class="row g-2 mb-2">
+    <div class="col-md-4">
+      <label class="form-label">Sale Name</label>
+      <input id="saleName" class="form-control" placeholder="e.g. 50% Off Coffee">
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label">Sale Type</label>
+      <select id="saleType" class="form-select" onchange="updateSaleTypeHelp()">
+        <option value="DOLLAR_OFF">$ Off Order</option>
+        <option value="PERCENT_OFF">% Off Order</option>
+        <option value="PERCENT_OFF_ITEM">% Off Specific Item</option>
+        <option value="PERCENT_OFF_CATEGORY">% Off Category</option>
+        <option value="BOGO_ITEM">BOGO Item</option>
+        <option value="COMBO_PRICE">Combo Price</option>
+      </select>
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Amount</label>
+      <input id="saleAmount" type="number" step="0.01" class="form-control" placeholder="0">
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label">Item for BOGO</label>
+      <select id="saleItem" class="form-select">
+        <option value="">None</option>
+      </select>
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label">Category</label>
+      <select id="saleCategory" class="form-select">
+        <option value="">None</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="col-md-2">
+    <label class="form-label">Buy Qty</label>
+    <input id="saleBuyQty" type="number" min="1" step="1" class="form-control" value="1">
+  </div>
+
+  <div class="col-md-2">
+    <label class="form-label">Free Qty</label>
+    <input id="saleFreeQty" type="number" min="1" step="1" class="form-control" value="1">
+  </div>
+<br>
+  <div id="comboRequirementsBox" class="border rounded p-3 mb-3" style="display:none;">
+    <h6>Combo Requirements</h6>
+
+    <div class="row g-2 mb-2">
+      <div class="col-md-3">
+        <label class="form-label">Requirement Type</label>
+        <select id="comboReqType" class="form-select" onchange="updateComboReqInputs()">
+          <option value="CATEGORY">Category</option>
+          <option value="ITEM">Specific Item</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Item</label>
+        <select id="comboReqItem" class="form-select">
+          <option value="">None</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Category</label>
+        <select id="comboReqCategory" class="form-select">
+          <option value="">None</option>
+        </select>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label">Qty</label>
+        <input id="comboReqQty" type="number" min="1" step="1" class="form-control" value="1">
+      </div>
+
+      <div class="col-md-1 d-flex align-items-end">
+        <button class="btn btn-primary w-100" onclick="addComboRequirement()">+</button>
+      </div>
+    </div>
+
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Item/Category</th>
+          <th>Qty</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="comboReqTable"></tbody>
+    </table>
+  </div>
+
+  <small id="saleTypeHelp" class="text-muted d-block mb-3">
+    Dollar off applies a fixed discount to the order.
+  </small>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md-3">
+      <label class="form-label">Starts On</label>
+      <input id="saleStarts" type="date" class="form-control">
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label">Ends On</label>
+      <input id="saleEnds" type="date" class="form-control">
+    </div>
+
+    <div class="col-md-3 d-flex align-items-end">
+      <div class="form-check">
+        <input id="saleActive" class="form-check-input" type="checkbox" checked>
+        <label class="form-check-label" for="saleActive">Active</label>
+      </div>
+    </div>
+
+    <div class="col-md-3 d-flex align-items-end">
+      <div class="form-check">
+        <input id="saleAutoApply" class="form-check-input" type="checkbox">
+        <label class="form-check-label" for="saleAutoApply">Auto Apply</label>
+      </div>
+    </div>
+
+    <div class="col-md-3 d-flex align-items-end gap-2">
+      <button class="btn btn-primary w-100" onclick="saveSale()">Save Sale</button>
+      <button class="btn btn-secondary" onclick="clearSaleForm()">Clear</button>
+    </div>
+  </div>
+
+  <table class="table table-sm table-striped">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Amount</th>
+        <th>Item</th>
+        <th>Category</th>
+        <th>Dates</th>
+        <th>Status</th>
+        <th>Auto</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="salesTable"></tbody>
+  </table>
+</div>
+
+<div class="mb-3" style="max-width: 240px;">
+  <label class="form-label" for="taxRate">Tax Rate</label>
+  <div class="input-group">
+    <input id="taxRate" type="number" step="0.01" min="0" class="form-control" placeholder="0">
+    <span class="input-group-text">%</span>
+  </div>
+  <small class="text-muted">
+    Montana sales tax is 0%. Leave this at 0 to hide tax on receipts and reports.
+  </small>
+</div>
+
+<!-- Export Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exportModalLabel">Export Database Tables</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Select what kind of export you want:</p>
+
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="radio" name="exportType" id="exportCatalog" value="catalog" checked>
+          <label class="form-check-label" for="exportCatalog">
+            <strong>Catalog Setup Export</strong>
+            <br>
+            <small class="text-muted">
+              Exports menu, inventory, components, recipes, sales/promotions, and settings.
+              Best for moving setup to another computer or resetting test sales.
+            </small>
+          </label>
+        </div>
+
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="radio" name="exportType" id="exportFull" value="full">
+          <label class="form-check-label" for="exportFull">
+            <strong>Full Database Backup</strong>
+            <br>
+            <small class="text-muted">
+              Exports everything, including orders, shifts, discounts, expenses, and PINs.
+            </small>
+          </label>
+        </div>
+
+        <label class="form-label">Format</label>
+        <div class="d-flex gap-3 mb-2">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="formatRadios" id="fmtCsv" value="csv" checked>
+            <label class="form-check-label" for="fmtCsv">ZIP of CSV files</label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="formatRadios" id="fmtSql" value="sql">
+            <label class="form-check-label" for="fmtSql">Single .sql file</label>
+          </div>
+        </div>
+
+        <small class="text-muted d-block">
+          For easiest full restore later, use Full Database Backup as SQL.
+        </small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" onclick="doExport()">Export</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Restore Modal -->
+<div class="modal fade" id="restoreModal" tabindex="-1" aria-labelledby="restoreModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title" id="restoreModalLabel">Restore Database</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="alert alert-warning">
+          <strong>Be careful.</strong><br>
+          Restore will overwrite parts of the current database. A safety backup will be created first.
+        </div>
+
+        <label class="form-label">Restore Type</label>
+
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="radio" name="restoreType" id="restoreCatalog" value="catalog" checked>
+          <label class="form-check-label" for="restoreCatalog">
+            <strong>Restore Catalog Setup</strong>
+            <br>
+            <small class="text-muted">
+              Restores setup tables only. Use a catalog SQL export.
+            </small>
+          </label>
+        </div>
+
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="radio" name="restoreType" id="restoreFull" value="full">
+          <label class="form-check-label" for="restoreFull">
+            <strong>Restore Full Backup</strong>
+            <br>
+            <small class="text-muted">
+              Restores the full database, including orders, shifts, reports, discounts, expenses, and PINs.
+            </small>
+          </label>
+        </div>
+
+        <label class="form-label">SQL Backup File</label>
+        <input id="restoreFile" type="file" class="form-control" accept=".sql">
+
+        <small class="text-muted d-block mt-2">
+          Only .sql exports are supported for restore right now.
+        </small>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" onclick="doRestore()">Restore</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // Prevent any accidental form submission inside modals
+document.addEventListener("submit", (e) => e.preventDefault());
+
+function openExportsFolder() {
+  fetch('/api/admin/open_exports_folder', { method: 'POST' })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.ok) throw new Error(res.error || "Failed to open exports folder.");
+    })
+    .catch(err => alert(err));
+}
+
+function doExport() {
+  const exportType = document.querySelector('input[name="exportType"]:checked')?.value || "catalog";
+  const fmt = document.getElementById('fmtSql').checked ? "sql" : "csv";
+
+  fetch("/api/admin/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      export_type: exportType,
+      format: fmt
+    })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (!res.ok || !res.saved_to) {
+      throw new Error(res.error || "Export failed.");
+    }
+
+    alert("Export saved to:\n" + res.saved_to);
+
+    const modal = bootstrap.Modal.getInstance(document.getElementById("exportModal"));
+    if (modal) modal.hide();
+  })
+  .catch(err => alert(err));
+}
+
+// -- Restore button inside modal calls doRestore() -->
+function doRestore() {
+  const restoreType = document.querySelector('input[name="restoreType"]:checked')?.value || "catalog";
+  const fileInput = document.getElementById("restoreFile");
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    alert("Choose a .sql backup file first.");
+    return;
+  }
+
+  const file = fileInput.files[0];
+
+  if (!file.name.toLowerCase().endsWith(".sql")) {
+    alert("Only .sql files can be restored right now.");
+    return;
+  }
+
+  const warning =
+    restoreType === "full"
+      ? "This will restore the FULL database and overwrite current orders, shifts, reports, settings, and PINs."
+      : "This will restore catalog setup tables. Current menu/setup tables may be overwritten.";
+
+  if (!confirm(`${warning}\n\nA safety backup will be created first.\n\nContinue?`)) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("restore_type", restoreType);
+  formData.append("backup_file", file);
+
+  fetch("/api/admin/restore", {
+    method: "POST",
+    body: formData
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (!res.ok) {
+      throw new Error(res.error || "Restore failed.");
+    }
+
+    alert(
+      "Restore complete.\n\n" +
+      "Safety backup created at:\n" +
+      res.safety_backup
+    );
+
+    const modal = bootstrap.Modal.getInstance(document.getElementById("restoreModal"));
+    if (modal) modal.hide();
+
+    location.reload();
+  })
+  .catch(err => alert("Restore error: " + err));
+}
+</script>
+
+<script>
+async function loadSettings() {
+  const settings = await fetch('/api/admin/settings').then(r => r.json());
+  document.getElementById('requirePinDiscounts').checked = !!settings.require_pin_discounts;
+  document.getElementById('requirePinAdminAccess').checked = !!settings.require_pin_admin_access;
+  document.getElementById('requirePinExitProgram').checked = !!settings.require_pin_exit_program;
+  document.getElementById('taxRate').value = Number((settings.tax_rate || 0) * 100).toFixed(2).replace(/\.00$/, '');
+
+  const pins = await fetch('/api/admin/admin_pins').then(r => r.json());
+  const tbody = document.getElementById('pinsTable');
+  tbody.innerHTML = '';
+
+  pins.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${p.label || 'PIN #' + p.id}</td>
+      <td>${p.active ? 'Active' : 'Inactive'}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-danger" onclick="deletePin(${p.id})">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function saveSettings() {
+  const taxPercent = parseFloat(document.getElementById('taxRate').value || 0);
+
+  const payload = {
+    require_pin_discounts: document.getElementById('requirePinDiscounts').checked,
+    require_pin_admin_access: document.getElementById('requirePinAdminAccess').checked,
+    require_pin_exit_program: document.getElementById('requirePinExitProgram').checked,
+    tax_rate: Math.max(0, taxPercent) / 100
+  };
+
+  const res = await fetch('/api/admin/settings/update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  }).then(r => r.json());
+
+  if (res.ok) alert("Settings saved.");
+  else alert("Could not save settings.");
+}
+
+async function addPin() {
+  const label = document.getElementById('pinLabel').value.trim();
+  const pin = document.getElementById('pinValue').value.trim();
+
+  if (!pin) {
+    alert("Enter a PIN.");
+    return;
+  }
+
+  const res = await fetch('/api/admin/admin_pins/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({label, pin})
+  }).then(r => r.json());
+
+  if (!res.ok) {
+    alert("Could not add PIN.");
+    return;
+  }
+
+  document.getElementById('pinLabel').value = '';
+  document.getElementById('pinValue').value = '';
+  loadSettings();
+}
+
+async function deletePin(id) {
+  if (!confirm("Delete this PIN?")) return;
+
+  const res = await fetch('/api/admin/admin_pins/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id})
+  }).then(r => r.json());
+
+  if (!res.ok) {
+    alert("Could not delete PIN.");
+    return;
+  }
+
+  loadSettings();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  loadSaleItems();
+  loadSaleCategories();
+  loadSalesAdmin();
+  updateSaleTypeHelp();
+});
+</script>
+
+<script>
+async function loadSaleItems() {
+  const items = await fetch('/api/admin/get_items').then(r => r.json());
+
+  const saleItem = document.getElementById('saleItem');
+  const comboReqItem = document.getElementById('comboReqItem');
+
+  [saleItem, comboReqItem].forEach(select => {
+    select.innerHTML = '<option value="">None</option>';
+
+    items.forEach(i => {
+      const opt = document.createElement('option');
+      opt.value = i.id;
+      opt.textContent = i.name;
+      select.appendChild(opt);
+    });
+  });
+}
+
+async function loadSaleCategories() {
+  const items = await fetch('/api/admin/get_items').then(r => r.json());
+
+  const categories = [...new Set(
+    items
+      .map(i => i.category)
+      .filter(c => c && c.trim())
+  )].sort();
+
+  const saleCategory = document.getElementById('saleCategory');
+  const comboReqCategory = document.getElementById('comboReqCategory');
+
+  [saleCategory, comboReqCategory].forEach(select => {
+    select.innerHTML = '<option value="">None</option>';
+
+    categories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat;
+      opt.textContent = cat;
+      select.appendChild(opt);
+    });
+  });
+}
+
+function updateSaleTypeHelp() {
+  const comboBox = document.getElementById('comboRequirementsBox');
+  const type = document.getElementById('saleType').value;
+  const amount = document.getElementById('saleAmount');
+  const item = document.getElementById('saleItem');
+  const category = document.getElementById('saleCategory');
+  const buyQty = document.getElementById('saleBuyQty');
+  const freeQty = document.getElementById('saleFreeQty');
+  const help = document.getElementById('saleTypeHelp');
+
+  comboBox.style.display = 'none';
+  amount.disabled = false;
+  item.disabled = true;
+  category.disabled = true;
+  buyQty.disabled = true;
+  freeQty.disabled = true;
+
+  if (type === 'DOLLAR_OFF') {
+    help.textContent = 'Dollar off applies a fixed discount to the whole order. Example: amount 1.00 = $1 off.';
+  }
+
+  else if (type === 'PERCENT_OFF') {
+    help.textContent = 'Percent off applies to the whole order. Example: amount 50 = 50% off.';
+  }
+
+  else if (type === 'PERCENT_OFF_ITEM') {
+    item.disabled = false;
+    help.textContent = 'Percent off applies only to the selected item. Example: 50% off Coffee 12oz.';
+  }
+
+  else if (type === 'PERCENT_OFF_CATEGORY') {
+    category.disabled = false;
+    help.textContent = 'Percent off applies only to items in the selected category. Example: 25% off Pastries.';
+  }
+
+  else if (type === 'BOGO_ITEM') {
+    amount.disabled = true;
+    amount.value = 0;
+    item.disabled = false;
+    buyQty.disabled = false;
+    freeQty.disabled = false;
+
+    help.textContent = 'BOGO applies to the selected item. Example: Buy Qty 2 and Free Qty 1 = buy 2, get 1 free.';
+  }
+
+  else if (type === 'COMBO_PRICE') {
+    amount.disabled = false;
+    item.disabled = true;
+    category.disabled = true;
+    buyQty.disabled = true;
+    freeQty.disabled = true;
+    comboBox.style.display = 'block';
+
+    help.textContent = 'Combo price charges the qualifying group at a fixed total price. Example: 2 Drinks + 1 Pastry for $5.';
+  }
+}
+
+async function loadSalesAdmin() {
+  const sales = await fetch('/api/admin/sales').then(r => r.json());
+  const tbody = document.getElementById('salesTable');
+  tbody.innerHTML = '';
+
+  sales.forEach(s => {
+    const tr = document.createElement('tr');
+
+    const dates = `${s.starts_on || 'Any'} → ${s.ends_on || 'Any'}`;
+
+    tr.innerHTML = `
+      <td>${s.name}</td>
+      <td>${s.sale_type}</td>
+      <td>
+        ${
+          s.sale_type === 'PERCENT_OFF' ||
+          s.sale_type === 'PERCENT_OFF_ITEM' || 
+          s.sale_type === 'PERCENT_OFF_CATEGORY'
+            ? `${s.amount}%`
+            : s.sale_type === 'BOGO_ITEM'
+              ? `Buy ${s.buy_qty || 1}, Get ${s.free_qty || 1}`
+              : `$${Number(s.amount || 0).toFixed(2)}`
+        }
+      </td>
+      <td>${s.item_name || '-'}</td>
+      <td>${s.category || '-'}</td>
+      <td>${dates}</td>
+      <td>${s.active ? 'Active' : 'Inactive'}</td>
+      <td>${s.auto_apply ? 'Yes' : 'No'}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-primary" onclick='editSale(${JSON.stringify(s)})'>Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteSale(${s.id})">Delete</button>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+function clearSaleForm() {
+  document.getElementById('saleId').value = '';
+  document.getElementById('saleName').value = '';
+  document.getElementById('saleType').value = 'DOLLAR_OFF';
+  document.getElementById('saleAmount').value = '';
+  document.getElementById('saleItem').value = '';
+  document.getElementById('saleCategory').value = '';
+  document.getElementById('saleBuyQty').value = 1;
+  document.getElementById('saleFreeQty').value = 1;
+  document.getElementById('saleAutoApply').checked = false;
+  document.getElementById('saleStarts').value = '';
+  document.getElementById('saleEnds').value = '';
+  document.getElementById('saleActive').checked = true;
+  comboRequirements = [];
+  renderComboRequirements();
+  document.getElementById('comboRequirementsBox').style.display = 'none';
+  updateSaleTypeHelp();
+}
+
+function editSale(s) {
+  document.getElementById('saleId').value = s.id;
+  document.getElementById('saleName').value = s.name || '';
+  document.getElementById('saleType').value = s.sale_type || 'DOLLAR_OFF';
+  document.getElementById('saleAmount').value = s.amount || 0;
+  document.getElementById('saleItem').value = s.item_id || '';
+  document.getElementById('saleCategory').value = s.category || '';
+  document.getElementById('saleBuyQty').value = s.buy_qty || 1;
+  document.getElementById('saleFreeQty').value = s.free_qty || 1;
+  document.getElementById('saleAutoApply').checked = !!s.auto_apply;
+  document.getElementById('saleStarts').value = s.starts_on || '';
+  document.getElementById('saleEnds').value = s.ends_on || '';
+  document.getElementById('saleActive').checked = !!s.active;
+  comboRequirements = s.requirements || [];
+  renderComboRequirements();
+  updateSaleTypeHelp();
+}
+
+async function saveSale() {
+  const id = document.getElementById('saleId').value;
+
+  const payload = {
+    id: id ? parseInt(id) : null,
+    name: document.getElementById('saleName').value.trim(),
+    sale_type: document.getElementById('saleType').value,
+    amount: parseFloat(document.getElementById('saleAmount').value || 0),
+    item_id: document.getElementById('saleItem').value || null,
+    category: document.getElementById('saleCategory').value || null,
+    buy_qty: parseInt(document.getElementById('saleBuyQty').value || 1),
+    free_qty: parseInt(document.getElementById('saleFreeQty').value || 1),
+    auto_apply: document.getElementById('saleAutoApply').checked ? 1 : 0,
+    starts_on: document.getElementById('saleStarts').value || null,
+    ends_on: document.getElementById('saleEnds').value || null,
+    active: document.getElementById('saleActive').checked ? 1 : 0,
+    requirements: comboRequirements,
+  };
+
+  if (!payload.name) {
+    alert("Enter a sale name.");
+    return;
+  }
+
+  if (payload.sale_type !== 'BOGO_ITEM' && payload.amount <= 0) {
+    alert("Enter a discount amount or combo price.");
+    return;
+  }
+
+  if (payload.sale_type === 'PERCENT_OFF_ITEM' && !payload.item_id) {
+    alert("Choose an item for this sale.");
+    return;
+  }
+
+  if (payload.sale_type === 'PERCENT_OFF_CATEGORY' && !payload.category) {
+    alert("Choose a category for this sale.");
+    return;
+  }
+
+  if (payload.sale_type === 'BOGO_ITEM') {
+    if (!payload.item_id) {
+      alert("Choose an item for BOGO.");
+      return;
+    }
+
+    if (payload.buy_qty < 1 || payload.free_qty < 1) {
+      alert("BOGO buy/free quantities must be at least 1.");
+      return;
+    }
+  }
+
+  if (payload.sale_type === 'COMBO_PRICE') {
+    if (payload.amount <= 0) {
+      alert("Enter the combo price.");
+      return;
+    }
+
+    if (!payload.requirements || payload.requirements.length < 2) {
+      alert("Combo deals should have at least two requirements.");
+      return;
+    }
+  }
+
+  const url = id ? '/api/admin/sales/update' : '/api/admin/sales/add';
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  }).then(r => r.json());
+
+  if (!res.ok) {
+    alert("Could not save sale.");
+    return;
+  }
+
+  clearSaleForm();
+  loadSalesAdmin();
+}
+
+async function deleteSale(id) {
+  if (!confirm("Delete this sale?")) return;
+
+  const res = await fetch('/api/admin/sales/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ id })
+  }).then(r => r.json());
+
+  if (!res.ok) {
+    alert("Could not delete sale.");
+    return;
+  }
+
+  loadSalesAdmin();
+}
+
+// ------------------------------------------------------
+// Combo Requirements
+// ------------------------------------------------------
+let comboRequirements = [];
+
+function updateComboReqInputs() {
+  const type = document.getElementById('comboReqType').value;
+  document.getElementById('comboReqItem').disabled = type !== 'ITEM';
+  document.getElementById('comboReqCategory').disabled = type !== 'CATEGORY';
+}
+
+function renderComboRequirements() {
+  const tbody = document.getElementById('comboReqTable');
+  tbody.innerHTML = '';
+
+  comboRequirements.forEach((req, idx) => {
+    const tr = document.createElement('tr');
+
+    const label = req.requirement_type === 'ITEM'
+      ? req.item_name || `Item #${req.item_id}`
+      : req.category;
+
+    tr.innerHTML = `
+      <td>${req.requirement_type}</td>
+      <td>${label || '-'}</td>
+      <td>${req.qty}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-danger" onclick="removeComboRequirement(${idx})">Remove</button>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+function addComboRequirement() {
+  const type = document.getElementById('comboReqType').value;
+  const qty = parseInt(document.getElementById('comboReqQty').value || 1);
+
+  if (qty < 1) {
+    alert("Quantity must be at least 1.");
+    return;
+  }
+
+  if (type === 'ITEM') {
+    const select = document.getElementById('comboReqItem');
+    const itemId = select.value;
+    const itemName = select.options[select.selectedIndex]?.textContent || '';
+
+    if (!itemId) {
+      alert("Choose an item.");
+      return;
+    }
+
+    comboRequirements.push({
+      requirement_type: 'ITEM',
+      item_id: itemId,
+      item_name: itemName,
+      category: null,
+      qty
+    });
+  } else {
+    const select = document.getElementById('comboReqCategory');
+    const category = select.value;
+
+    if (!category) {
+      alert("Choose a category.");
+      return;
+    }
+
+    comboRequirements.push({
+      requirement_type: 'CATEGORY',
+      item_id: null,
+      item_name: null,
+      category,
+      qty
+    });
+  }
+
+  renderComboRequirements();
+}
+
+function removeComboRequirement(idx) {
+  comboRequirements.splice(idx, 1);
+  renderComboRequirements();
+}
+</script>
+
+{% endblock %}

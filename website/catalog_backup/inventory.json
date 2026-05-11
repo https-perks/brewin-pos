@@ -1,0 +1,173 @@
+[
+  {
+    "id": 1,
+    "name": "Small Pastry",
+    "unit": "Each",
+    "case_cost": 0.75,
+    "units_per_case": 1.0,
+    "qty_on_hand": 18.0,
+    "reorder_point": 0.0
+  },
+  {
+    "id": 2,
+    "name": "Large Pastry",
+    "unit": "Each",
+    "case_cost": 1.0,
+    "units_per_case": 1.0,
+    "qty_on_hand": 15.0,
+    "reorder_point": 0.0
+  },
+  {
+    "id": 5,
+    "name": "Coffee Filters",
+    "unit": "Each",
+    "case_cost": 33.0,
+    "units_per_case": 1000.0,
+    "qty_on_hand": 1000.0,
+    "reorder_point": 50.0
+  },
+  {
+    "id": 6,
+    "name": "Folger's Coffee",
+    "unit": "Each",
+    "case_cost": 35.0,
+    "units_per_case": 36.0,
+    "qty_on_hand": 36.0,
+    "reorder_point": 50.0
+  },
+  {
+    "id": 7,
+    "name": "N'Joy Creamer (12oz)",
+    "unit": "Each",
+    "case_cost": 10.25,
+    "units_per_case": 3.0,
+    "qty_on_hand": 0.0,
+    "reorder_point": 1.0
+  },
+  {
+    "id": 8,
+    "name": "N'Joy Sugar (20oz)",
+    "unit": "Each",
+    "case_cost": 11.0,
+    "units_per_case": 3.0,
+    "qty_on_hand": 3.0,
+    "reorder_point": 1.0
+  },
+  {
+    "id": 9,
+    "name": "Compostable Plates",
+    "unit": "Each",
+    "case_cost": 75.0,
+    "units_per_case": 1000.0,
+    "qty_on_hand": 1013.0,
+    "reorder_point": 100.0
+  },
+  {
+    "id": 10,
+    "name": "Foam Cups 12oz",
+    "unit": "Each",
+    "case_cost": 70.0,
+    "units_per_case": 1000.0,
+    "qty_on_hand": 999.0,
+    "reorder_point": 100.0
+  },
+  {
+    "id": 11,
+    "name": "Foam Cups 8oz",
+    "unit": "Each",
+    "case_cost": 55.0,
+    "units_per_case": 1000.0,
+    "qty_on_hand": 999.0,
+    "reorder_point": 100.0
+  },
+  {
+    "id": 12,
+    "name": "Coffee Stirrers",
+    "unit": "Each",
+    "case_cost": 4.3,
+    "units_per_case": 1000.0,
+    "qty_on_hand": 998.0,
+    "reorder_point": 100.0
+  },
+  {
+    "id": 13,
+    "name": "Napkins",
+    "unit": "Each",
+    "case_cost": 92.0,
+    "units_per_case": 500.0,
+    "qty_on_hand": 514.0,
+    "reorder_point": 100.0
+  },
+  {
+    "id": 14,
+    "name": "Bigelow Tea",
+    "unit": "Each",
+    "case_cost": 44.0,
+    "units_per_case": 168.0,
+    "qty_on_hand": 167.0,
+    "reorder_point": 28.0
+  },
+  {
+    "id": 15,
+    "name": "Hot Chocolate",
+    "unit": "Each",
+    "case_cost": 18.0,
+    "units_per_case": 50.0,
+    "qty_on_hand": 18.0,
+    "reorder_point": 25.0
+  },
+  {
+    "id": 16,
+    "name": "Chex Mix",
+    "unit": "Each",
+    "case_cost": 38.71,
+    "units_per_case": 60.0,
+    "qty_on_hand": 60.0,
+    "reorder_point": 10.0
+  },
+  {
+    "id": 17,
+    "name": "Jerky Stick",
+    "unit": "Each",
+    "case_cost": 20.75,
+    "units_per_case": 20.0,
+    "qty_on_hand": 60.0,
+    "reorder_point": 10.0
+  },
+  {
+    "id": 18,
+    "name": "Belvita Crackers",
+    "unit": "Each",
+    "case_cost": 8.9,
+    "units_per_case": 8.0,
+    "qty_on_hand": 5.0,
+    "reorder_point": 10.0
+  },
+  {
+    "id": 19,
+    "name": "Cookie",
+    "unit": "Each",
+    "case_cost": 10.35,
+    "units_per_case": 12.0,
+    "qty_on_hand": 45.0,
+    "reorder_point": 10.0
+  },
+  {
+    "id": 22,
+    "name": "Lids 12oz",
+    "unit": "Each",
+    "case_cost": 70.0,
+    "units_per_case": 1000.0,
+    "qty_on_hand": 999.0,
+    "reorder_point": 100.0
+  },
+  {
+    "id": 23,
+    "name": "Lids 8oz",
+    "unit": "Each",
+    "case_cost": 55.0,
+    "units_per_case": 1000.0,
+    "qty_on_hand": 999.0,
+    "reorder_point": 100.0
+  }
+]

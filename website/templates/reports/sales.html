@@ -1,0 +1,253 @@
+{% extends "layout.html" %}
+{% block content %}
+{% include 'reports/_subnav.html' %}
+
+<h2>Daily Sales Summary</h2>
+
+<div class="card p-3 mb-3">
+  <div class="d-flex align-items-center gap-2">
+    <label for="salesDate" class="form-label m-0 me-2">Date:</label>
+    <input id="salesDate" type="date" class="form-control" style="max-width: 220px;">
+    <button class="btn btn-primary" onclick="loadSales()">Generate</button>
+    <button id="dlSalesBtn" class="btn btn-success" onclick="downloadSales()" disabled>Download Excel</button>
+  </div>
+</div>
+
+<div id="salesPanel" class="card p-3">
+  <p class="text-muted">Select a date to view sales summary.</p>
+</div>
+
+<script>
+function fmtMoney(x){return `$${Number(x||0).toFixed(2)}`;}
+
+function loadSales(){
+  const date = document.getElementById('salesDate').value;
+  if(!date){alert("Pick a date.");return;}
+
+  fetch(`/api/reports/sales?date=${encodeURIComponent(date)}`)
+    .then(r=>r.json())
+    .then(data=>{
+      document.getElementById('dlSalesBtn').disabled = false;
+
+      let html = `<h5>Sales Report for ${data.date}</h5>`;
+      html += `<table class="table table-sm table-striped mt-3">
+        <thead><tr><th>Item</th><th class='text-end'>Qty Sold</th>
+        <th class='text-end'>Unit Price</th><th class='text-end'>Gross</th>
+        <th class='text-end'>COGS</th></tr></thead><tbody>`;
+
+      data.items.forEach(it=>{
+        html += `<tr>
+          <td>${it.name}</td>
+          <td class='text-end'>${it.qty_sold}</td>
+          <td class='text-end'>${fmtMoney(it.unit_price)}</td>
+          <td class='text-end'>${fmtMoney(it.gross)}</td>
+          <td class='text-end'>${fmtMoney(it.cogs)}</td>
+        </tr>`;
+      });
+
+      html += `</tbody></table>`;
+      const hasTax = Number(data.tax_total || 0) > 0;
+      const hasDiscounts = Number(data.discount_total || 0) > 0;
+
+      html += `<hr>`;
+
+      if (hasDiscounts) {
+        html += `
+          <h6>Discounts</h6>
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Sale</th>
+                <th class="text-end">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(data.discounts || []).map(d => `
+                <tr>
+                  <td>${d.source || '-'}</td>
+                  <td>${d.sale_name || 'Discount'}</td>
+                  <td class="text-end">-${fmtMoney(d.amount)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+
+      html += `<div class='text-end'>
+        <div>Pre-Discount Sales: <strong>${fmtMoney(data.pre_discount_sales ?? data.gross_total)}</strong></div>
+        ${hasDiscounts ? `<div>Discounts: <strong>-${fmtMoney(data.discount_total)}</strong></div>` : ''}
+        ${hasTax ? `<div>Tax: <strong>${fmtMoney(data.tax_total)}</strong></div>` : ''}
+        <div>Net Sales: <strong>${fmtMoney(data.net_sales ?? data.gross_total)}</strong></div>
+        <div>Cost of Goods Sold: <strong>${fmtMoney(data.cogs_total)}</strong></div>
+        <div>Gross Profit: <strong>${fmtMoney(data.gp)}</strong></div>
+        <div>Operating Expenses: <strong>${fmtMoney(data.expenses)}</strong></div>
+        <div class='fs-5 fw-bold'>Net Profit: ${fmtMoney(data.net_profit)}</div>
+      </div>`;
+      document.getElementById('salesPanel').innerHTML = html;
+    });
+}
+
+function downloadSales(){
+  const date = document.getElementById('salesDate').value;
+  if(!date)return;
+  window.location = `/api/reports/sales/xlsx?date=${encodeURIComponent(date)}`;
+}
+
+// set default date to today
+(function initDate(){
+  const d = new Date();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const yyyy = d.getFullYear();
+  document.getElementById('salesDate').value = `${yyyy}-${mm}-${dd}`;
+})();
+</script>
+
+<hr class="my-4">
+
+<h2>Date Range Summary</h2>
+<div class="card p-3 mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label">Start</label>
+      <input id="rangeStart" type="date" class="form-control">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">End</label>
+      <input id="rangeEnd" type="date" class="form-control">
+    </div>
+    <div class="col-md-6 d-flex flex-wrap gap-2">
+      <button class="btn btn-outline-secondary" onclick="presetWeek()">This Week</button>
+      <button class="btn btn-outline-secondary" onclick="presetMonth()">This Month</button>
+      <button class="btn btn-outline-secondary" onclick="presetQuarter()">This Quarter</button>
+      <button class="btn btn-primary ms-auto" onclick="loadSalesRange()">Generate</button>
+      <button id="dlRangeBtn" class="btn btn-success" onclick="downloadSalesRange()" disabled>Download Excel</button>
+    </div>
+  </div>
+</div>
+
+<div id="rangePanel" class="card p-3">
+  <p class="text-muted">Pick a start & end date (or use a preset) to see totals.</p>
+</div>
+
+<script>
+function fmtMoney(x){ return `$${Number(x||0).toFixed(2)}`; }
+
+function loadSalesRange(){
+  const s = document.getElementById('rangeStart').value;
+  const e = document.getElementById('rangeEnd').value;
+  if(!s || !e){ alert("Pick both start and end."); return; }
+
+  fetch(`/api/reports/sales_range?start=${encodeURIComponent(s)}&end=${encodeURIComponent(e)}`)
+    .then(r=>r.json())
+    .then(data=>{
+      document.getElementById('dlRangeBtn').disabled = false;
+
+      let html = `<h5>Sales Report ${data.start} → ${data.end}</h5>`;
+      html += `<table class="table table-sm table-striped mt-3">
+        <thead><tr>
+          <th>Item</th>
+          <th class="text-end">Qty Sold</th>
+          <th class="text-end">Unit Price</th>
+          <th class="text-end">Gross</th>
+          <th class="text-end">COGS</th>
+        </tr></thead><tbody>`;
+
+      data.items.forEach(it=>{
+        html += `<tr>
+          <td>${it.name}</td>
+          <td class="text-end">${it.qty_sold}</td>
+          <td class="text-end">${fmtMoney(it.unit_price)}</td>
+          <td class="text-end">${fmtMoney(it.gross)}</td>
+          <td class="text-end">${fmtMoney(it.cogs)}</td>
+        </tr>`;
+      });
+
+      html += `</tbody></table>`;
+      const hasTax = Number(data.tax_total || 0) > 0;
+      const hasDiscounts = Number(data.discount_total || 0) > 0;
+
+      html += `<hr>`;
+
+      if (hasDiscounts) {
+        html += `
+          <h6>Discounts</h6>
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Sale</th>
+                <th class="text-end">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(data.discounts || []).map(d => `
+                <tr>
+                  <td>${d.source || '-'}</td>
+                  <td>${d.sale_name || 'Discount'}</td>
+                  <td class="text-end">-${fmtMoney(d.amount)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+
+      html += `<div class="text-end">
+        <div>Pre-Discount Sales: <strong>${fmtMoney(data.pre_discount_sales ?? data.gross_total)}</strong></div>
+        ${hasDiscounts ? `<div>Discounts: <strong>-${fmtMoney(data.discount_total)}</strong></div>` : ''}
+        ${hasTax ? `<div>Tax: <strong>${fmtMoney(data.tax_total)}</strong></div>` : ''}
+        <div>Net Sales: <strong>${fmtMoney(data.net_sales ?? data.gross_total)}</strong></div>
+        <div>Cost of Goods Sold: <strong>${fmtMoney(data.cogs_total)}</strong></div>
+        <div>Gross Profit: <strong>${fmtMoney(data.gp)}</strong></div>
+        <div>Operating Expenses: <strong>${fmtMoney(data.expenses)}</strong></div>
+        <div class="fs-5 fw-bold">Net Profit: ${fmtMoney(data.net_profit)}</div>
+      </div>`;
+
+      document.getElementById('rangePanel').innerHTML = html;
+    });
+}
+
+function downloadSalesRange(){
+  const s = document.getElementById('rangeStart').value;
+  const e = document.getElementById('rangeEnd').value;
+  if(!s || !e) return;
+  window.location = `/api/reports/sales_range/xlsx?start=${encodeURIComponent(s)}&end=${encodeURIComponent(e)}`;
+}
+
+/* ===== Presets =====
+   Uses your local week/month/quarter by JS date arithmetic. */
+function iso(d){ return d.toISOString().slice(0,10); }
+
+function presetWeek(){
+  const d = new Date();               // today
+  const day = d.getDay();             // 0=Sun..6=Sat
+  const diffToMon = (day === 0 ? -6 : 1 - day); // Monday as start
+  const start = new Date(d); start.setDate(d.getDate() + diffToMon);
+  const end = new Date(start); end.setDate(start.getDate() + 6);
+  document.getElementById('rangeStart').value = iso(start);
+  document.getElementById('rangeEnd').value   = iso(end);
+}
+
+function presetMonth(){
+  const d = new Date();
+  const start = new Date(d.getFullYear(), d.getMonth(), 1);
+  const end   = new Date(d.getFullYear(), d.getMonth()+1, 0);
+  document.getElementById('rangeStart').value = iso(start);
+  document.getElementById('rangeEnd').value   = iso(end);
+}
+
+function presetQuarter(){
+  const d = new Date();
+  const q = Math.floor(d.getMonth()/3); // 0..3
+  const start = new Date(d.getFullYear(), q*3, 1);
+  const end   = new Date(d.getFullYear(), q*3 + 3, 0);
+  document.getElementById('rangeStart').value = iso(start);
+  document.getElementById('rangeEnd').value   = iso(end);
+}
+</script>
+<br>
+<br>
+{% endblock %}

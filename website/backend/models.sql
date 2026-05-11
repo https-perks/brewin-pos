@@ -1,0 +1,103 @@
+-- ITEMS
+CREATE TABLE IF NOT EXISTS items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sku TEXT UNIQUE,
+  name TEXT NOT NULL,
+  category TEXT,
+  price REAL NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1
+);
+
+-- COMPONENTS
+CREATE TABLE IF NOT EXISTS components (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  qty_used REAL DEFAULT 0,
+  unit_cost REAL DEFAULT 0,
+  pos_track_sellout INTEGER DEFAULT 0
+);
+
+-- RECIPES
+CREATE TABLE IF NOT EXISTS recipes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id INTEGER NOT NULL,
+  component_id INTEGER NOT NULL,
+  qty_per_item REAL NOT NULL DEFAULT 0,
+  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+  FOREIGN KEY (component_id) REFERENCES components(id) ON DELETE CASCADE,
+  UNIQUE (item_id, component_id)
+);
+
+-- INVENTORY (the warehouse-level stock)
+CREATE TABLE IF NOT EXISTS inventory (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  unit TEXT,
+  case_cost REAL DEFAULT 0,
+  units_per_case REAL DEFAULT 0,
+  qty_on_hand REAL DEFAULT 0,
+  reorder_point REAL DEFAULT 0,
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL,
+  cashier TEXT NOT NULL,
+  method TEXT NOT NULL,
+  discount REAL NOT NULL DEFAULT 0,
+  discount_type TEXT, 
+  tax REAL NOT NULL DEFAULT 0,
+  subtotal REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL DEFAULT 0,
+  cash_given REAL DEFAULT 0,
+  change_given REAL DEFAULT 0,
+  receipt_date TEXT,
+  receipt_seq INTEGER,
+  shift_id INTEGER,  -- REQUIRED so FK works
+  FOREIGN KEY (shift_id) REFERENCES shifts(id)
+);
+
+
+-- ORDER LINES
+CREATE TABLE IF NOT EXISTS order_lines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL,
+  item_id INTEGER NOT NULL,
+  qty REAL NOT NULL DEFAULT 0,
+  unit_price REAL NOT NULL DEFAULT 0,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_id) REFERENCES items(id)
+);
+
+-- SHIFTS
+CREATE TABLE IF NOT EXISTS shifts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts_start TEXT NOT NULL,
+  ts_end TEXT,
+  cashier TEXT NOT NULL,
+  opening_float REAL NOT NULL DEFAULT 0,
+  closing_amount REAL,
+  over_short REAL,
+  is_active INTEGER NOT NULL DEFAULT 1
+);
+
+-- EXPENSES (optional)
+CREATE TABLE IF NOT EXISTS expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,
+  category TEXT,
+  amount REAL NOT NULL DEFAULT 0,
+  memo TEXT
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_pins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pin TEXT NOT NULL,
+  label TEXT,
+  active INTEGER NOT NULL DEFAULT 1
+);

@@ -1,0 +1,191 @@
+{% extends "layout.html" %}
+{% block content %}
+{% include 'admin/_subnav.html' %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="m-0">Manage Items</h2>
+  <button id="toggleEdit" class="btn btn-secondary btn-sm" onclick="toggleEditMode()">✏️ Edit Mode</button>
+</div>
+
+<div class="card p-3 mb-4">
+  <h5>Add Item</h5>
+
+  <form onsubmit="addItem(); return false;">
+    <div class="row g-2">
+      <div class="col-md-2">
+        <input id="sku" placeholder="SKU" class="form-control">
+      </div>
+
+      <div class="col-md-4">
+        <input id="name" placeholder="Item Name" class="form-control">
+      </div>
+
+      <div class="col-md-3">
+        <input id="category" placeholder="Category" class="form-control">
+      </div>
+
+      <div class="col-md-2">
+        <input id="price" type="number" step="0.01" placeholder="Price" class="form-control">
+      </div>
+
+      <div class="col-md-1">
+        <button class="btn btn-primary w-100">Add</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="card p-3">
+  <h5>Items</h5>
+  <div class="table-responsive">
+    <table id="item-table" class="table table-sm table-striped align-middle"></table>
+  </div>
+</div>
+
+<br>
+<br>
+
+<script>
+let editMode = false;
+
+function fmtMoney(x) {
+  return `$${Number(x || 0).toFixed(2)}`;
+}
+
+function fmtPercent(x) {
+  return `${Number(x || 0).toFixed(1)}%`;
+}
+
+function marginClass(margin) {
+  margin = Number(margin || 0);
+
+  if (margin < 0) return "text-danger fw-bold";
+  if (margin < 30) return "text-warning fw-bold";
+  return "text-success fw-bold";
+}
+
+function toggleEditMode(){
+  editMode = !editMode;
+  document.getElementById('toggleEdit').innerText = editMode ? '✅ Done Editing' : '✏️ Edit Mode';
+  loadItems();
+}
+
+function loadItems(){
+  fetch('/api/items')
+    .then(r=>r.json())
+    .then(items=>{
+      let html = `
+        <thead>
+          <tr>
+            <th>SKU</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th class="text-end">Price</th>
+            <th class="text-end">Cost</th>
+            <th class="text-end">Gross Profit</th>
+            <th class="text-end">Margin</th>
+            ${editMode ? '<th class="text-end">Actions</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>
+      `;
+
+      items.forEach(it=>{
+        const price = Number(it.price || 0);
+        const cost = Number(it.item_cost || 0);
+        const grossProfit = Number(it.gross_profit || 0);
+        const margin = Number(it.margin_percent || 0);
+
+        if(editMode){
+          html += `
+            <tr>
+              <td>${it.sku || ''}</td>
+              <td><input class="form-control form-control-sm" id="name-${it.id}" value="${it.name || ''}"></td>
+              <td><input class="form-control form-control-sm" id="cat-${it.id}" value="${it.category || ''}"></td>
+              <td><input type="number" step="0.01" class="form-control form-control-sm text-end" id="price-${it.id}" value="${price}"></td>
+              <td class="text-end">${fmtMoney(cost)}</td>
+              <td class="text-end">${fmtMoney(grossProfit)}</td>
+              <td class="text-end ${marginClass(margin)}">${fmtPercent(margin)}</td>
+              <td class="text-end">
+                <button class="btn btn-sm btn-success" onclick="saveItem(${it.id})">💾</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteItem(${it.id})">🗑️</button>
+              </td>
+            </tr>`;
+        } else {
+          html += `
+            <tr>
+              <td>${it.sku || ''}</td>
+              <td>${it.name || ''}</td>
+              <td>${it.category || ''}</td>
+              <td class="text-end">${fmtMoney(price)}</td>
+              <td class="text-end">${fmtMoney(cost)}</td>
+              <td class="text-end">${fmtMoney(grossProfit)}</td>
+              <td class="text-end ${marginClass(margin)}">${fmtPercent(margin)}</td>
+            </tr>`;
+        }
+      });
+
+      html += `</tbody>`;
+      document.getElementById('item-table').innerHTML = html;
+    });
+}
+
+function saveItem(id){
+  const payload = {
+    id: id,
+    name: document.getElementById('name-'+id).value.trim(),
+    category: document.getElementById('cat-'+id).value.trim(),
+    price: parseFloat(document.getElementById('price-'+id).value||0)
+  };
+
+  fetch('/api/admin/update_item',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  }).then(()=>loadItems());
+}
+
+function deleteItem(id){
+  if(!confirm('Delete this item?')) return;
+
+  fetch('/api/admin/delete_item',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:id})
+  }).then(()=>loadItems());
+}
+
+function addItem(){
+  const skuField = document.getElementById('sku');
+  const nameField = document.getElementById('name');
+  const categoryField = document.getElementById('category');
+  const priceField = document.getElementById('price');
+
+  const payload = {
+    sku: skuField.value.trim(),
+    name: nameField.value.trim(),
+    category: categoryField.value.trim(),
+    price: parseFloat(priceField.value || 0)
+  };
+
+  if (!payload.name){
+    alert("Please enter an item name.");
+    return;
+  }
+
+  fetch('/api/admin/add_item',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  }).then(()=>{
+    skuField.value = '';
+    nameField.value = '';
+    categoryField.value = '';
+    priceField.value = '';
+    loadItems();
+  });
+}
+
+loadItems();
+</script>
+{% endblock %}

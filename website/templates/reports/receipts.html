@@ -1,0 +1,220 @@
+{% extends "layout.html" %}
+{% block content %}
+{% include 'reports/_subnav.html' %}
+<h2>Reports</h2>
+
+<div class="card p-3 mb-3">
+  <h5 class="mb-2">Receipts</h5>
+  <div class="d-flex align-items-center gap-2">
+    <label for="rcptDate" class="form-label m-0 me-2">Date:</label>
+    <input id="rcptDate" type="date" class="form-control" style="max-width: 220px;">
+    <button class="btn btn-primary" onclick="loadReceipts()">Load</button>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-header">Orders on <span id="rcptDateLabel">—</span></div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0" id="ordersTable">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Time</th>
+              <th class="text-end">Total</th>
+            </tr>
+          </thead>
+          <tbody id="ordersTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Receipt</span>
+        <div class="d-flex gap-2">
+          <button id="dlBtn" class="btn btn-sm btn-success" disabled onclick="downloadPdf()">Download PDF</button>
+          <button id="delBtn" class="btn btn-sm btn-danger" disabled onclick="deleteSale()">Delete Sale</button>
+        </div>
+      </div>
+      <div class="card-body" id="receiptPanel">
+        <p class="text-muted m-0">Select an order to view the receipt.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentOrderId = null;
+
+  function fmtMoney(x) { return `$${Number(x || 0).toFixed(2)}`; }
+
+  function loadReceipts() {
+    const date = document.getElementById('rcptDate').value;
+    if (!date) { alert("Pick a date."); return; }
+
+    document.getElementById('rcptDateLabel').textContent = date;
+
+    fetch(`/api/reports/orders?date=${encodeURIComponent(date)}`)
+      .then(r => r.json())
+      .then(rows => {
+        const tb = document.getElementById('ordersTbody');
+        tb.innerHTML = '';
+        rows.forEach(o => {
+          const tr = document.createElement('tr');
+          tr.style.cursor = 'pointer';
+          tr.onclick = () => loadReceipt(o.id);
+
+          // parse ts -> 12-hour time
+          const dt = new Date(o.ts); // works with ISO "YYYY-MM-DDTHH:MM:SS"
+          const hh = dt.getHours();
+          const mm = String(dt.getMinutes()).padStart(2, '0');
+          const ampm = hh >= 12 ? 'PM' : 'AM';
+          const hh12 = ((hh + 11) % 12) + 1; // 0->12
+          const time12 = `${hh12}:${mm} ${ampm}`;
+          tr.innerHTML = `
+            <td>#${o.receipt_no}</td>
+            <td>${time12}</td>
+            <td class="text-end">${fmtMoney(o.total)}</td>
+          `;
+          tb.appendChild(tr);
+        });
+
+        // clear panel if date changed
+        document.getElementById('receiptPanel').innerHTML = '<p class="text-muted m-0">Select an order to view the receipt.</p>';
+        document.getElementById('dlBtn').disabled = true;
+        currentOrderId = null;
+      });
+  }
+
+  function loadReceipt(orderId) {
+    fetch(`/api/reports/receipt/${orderId}`)
+      .then(r => r.json())
+      .then(data => {
+        currentOrderId = orderId;
+        document.getElementById('dlBtn').disabled = false;
+        document.getElementById('delBtn').disabled = false;
+
+        const o = data.order;
+        const lines = data.lines || [];
+        const discounts = data.discounts || [];
+        const dt = new Date(o.ts);
+        const hh = dt.getHours(); const mm = String(dt.getMinutes()).padStart(2, '0');
+        const ampm = hh >= 12 ? 'PM' : 'AM';
+        const hh12 = ((hh + 11) % 12) + 1;
+        const time12 = `${hh12}:${mm} ${ampm}`;
+
+        let html = `
+        <div>
+          <div class="d-flex justify-content-between">
+            <div>
+              <div><strong>Order #${o.receipt_no}</strong></div>
+              <div>${o.receipt_date} ${time12}</div>
+              <div>Cashier: ${o.cashier} | Method: ${o.method}</div>
+            </div>
+            <div class="text-end">
+              <div>Subtotal: ${fmtMoney(o.subtotal)}</div>
+
+              ${Number(o.discount || 0) > 0 ? `
+                <div>Discount: -${fmtMoney(o.discount)}</div>
+              ` : ''}
+
+              ${Number(o.tax || 0) > 0 ? `
+                <div>Tax: ${fmtMoney(o.tax)}</div>
+              ` : ''}
+
+              <div class="fw-bold">Total: ${fmtMoney(o.total)}</div>
+            </div>
+          </div>
+          <hr>
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th class="text-end">Qty</th>
+                <th class="text-end">Price</th>
+                <th class="text-end">Line</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${lines.map(ln => `
+                <tr>
+                  <td>${ln.item_name}</td>
+                  <td class="text-end">${ln.qty}</td>
+                  <td class="text-end">${fmtMoney(ln.unit_price)}</td>
+                  <td class="text-end">${fmtMoney(ln.line_total)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+            ${discounts.length ? `
+              <hr>
+              <h6>Discount Details</h6>
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Source</th>
+                    <th>Sale</th>
+                    <th>Authorized By</th>
+                    <th class="text-end">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${discounts.map(d => `
+                    <tr>
+                      <td>${d.source || '-'}</td>
+                      <td>${d.sale_name || d.sale_type || 'Discount'}</td>
+                      <td>${d.source === 'MANUAL' ? (d.authorized_pin_label || '—') : 'Automatic'}</td>
+                      <td class="text-end">-${fmtMoney(d.amount)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : ''}
+        </div>
+      `;
+        document.getElementById('receiptPanel').innerHTML = html;
+      });
+  }
+
+  function downloadPdf() {
+    if (!currentOrderId) return;
+    window.location = `/api/reports/receipt/${currentOrderId}/pdf`;
+  }
+
+  function deleteSale(){
+    if(!currentOrderId) return;
+    if(!confirm(`Delete order #${currentOrderId}? This will restore inventory used by this sale.`)) return;
+
+    fetch(`/api/reports/order/${currentOrderId}/delete`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'}
+    })
+    .then(r => r.json())
+    .then(res => {
+      if(!res.ok) { alert('Delete failed.'); return; }
+      // Refresh list and clear the receipt panel
+      loadReceipts();
+      document.getElementById('receiptPanel').innerHTML = '<p class="text-muted m-0">Select an order to view the receipt.</p>';
+      document.getElementById('dlBtn').disabled = true;
+      document.getElementById('delBtn').disabled = true;
+      currentOrderId = null;
+    })
+    .catch(err => alert(err));
+  }
+
+  // default to today
+  (function initDate() {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    document.getElementById('rcptDate').value = `${yyyy}-${mm}-${dd}`;
+  })();
+</script>
+<br>
+<br>
+{% endblock %}

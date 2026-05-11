@@ -1,0 +1,309 @@
+html,
+body,
+* {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  -webkit-app-region: no-drag !important;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  background-color: #f8e6c7;
+}
+
+.btn-outline-dark.active {
+  background-color: #212529;
+  color: #f8e6c7;
+}
+
+.btn-outline-dark.active:hover {
+  background-color: #212529;
+  color: #e7d4b3;
+}
+
+#cart button.btn-sm {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  text-align: center;
+  font-weight: bold;
+}
+
+#inv-table td .btn {
+  min-width: 34px;
+  padding: 2px 6px;
+}
+
+/* ===== Stock Level Highlights ===== */
+/* Low-stock / Out-of-stock overrides */
+.low-stock {
+  background-color: #ffd5ad !important;
+  border-radius: 0 0 10 0;
+  border-bottom:#212529; /* yellow */
+}
+
+.out-of-stock {
+  background-color: #f8d7da !important; /* light red */
+}
+
+/* Buttons inside table */
+#inv-table td .btn {
+  min-width: 34px;
+  padding: 3px 8px;
+  font-size: 0.85rem;
+  border-radius: 6px;
+}
+
+/* More specific selectors to beat Bootstrap */
+#inv-table tr.low-stock, 
+#inv-table tbody tr.low-stock,
+#inv-table tr.low-stock td { 
+  background-color:#ffd5ad !important; 
+  border-radius: 0 0 10 0;
+  border-bottom:#212529;}
+
+#inv-table tr.out-of-stock, 
+#inv-table tbody tr.out-of-stock,
+#inv-table tr.out-of-stock td { background-color:#f8d7da !important; }
+
+
+.low-stock td:nth-child(6),
+.out-of-stock td:nth-child(6) {
+  font-weight: 600;
+  color: #000;
+}
+
+/* ===== Inventory Page Styling ===== */
+
+/* Headings & layout */
+h2 {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 1rem;
+}
+
+form {
+  background: #fff9f0;
+  padding: 1rem;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+/* Table styling */
+/* ===============================
+   UNIVERSAL TABLE THEME
+   Applies to ALL custom tables
+================================*/
+table[id$="-table"] {
+    width: 100%;
+    border-collapse: collapse;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+}
+
+/* Header */
+table[id$="-table"] th {
+    background-color: #d8bf94;
+    color: #3d2c15;
+    text-align: center;
+    padding: 0.75rem;
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+/* Cells */
+table[id$="-table"] td {
+    text-align: center;
+    padding: 0.6rem;
+    vertical-align: middle;
+    color: #3d2c15;
+    font-size: 0.95rem;
+}
+
+/* Row striping */
+table[id$="-table"] tr:nth-child(even) {
+    background: #f8e6c7;
+}
+
+table[id$="-table"] tr:nth-child(odd) {
+    background: #fff9f0;
+}
+
+/* Hover */
+table[id$="-table"] tr:hover {
+    background: #f0dcb7;
+    transition: background 0.2s ease;
+}
+
+.bg-light {
+    background-color: #fff9f0 !important;   /* or whatever color you want */
+}
+
+.card {
+  background: #fff9f0;
+}
+.card-body {
+  background: #fff9f0;
+}
+
+.card-header {
+  background: #fff9f0;
+}
+
+
+/* Button styling */
+.btn {
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background-color: #0078d7;
+  border-color: #0078d7;
+}
+
+.btn-primary:hover {
+  background-color: #0063b1;
+  border-color: #0063b1;
+}
+
+.btn-danger {
+  background-color: #d83b01;
+  border-color: #d83b01;
+}
+
+.btn-danger:hover {
+  background-color: #a82f00;
+}
+
+.btn-secondary {
+  background-color: #e7d4b3;
+  color: #111;
+}
+
+.btn-secondary:hover {
+  background-color: #d8bf94;
+}
+
+/* Edit form layout */
+#invReset {
+  transform: scale(1.2);
+  margin-right: 4px;
+}
+
+#inv-table td .btn {
+  padding: 3px 8px;
+  font-size: 0.9rem;
+}
+
+/* Smooth highlight for active edit row */
+tr.editing {
+  background: #d8bf94 !important;
+  transition: background 0.4s ease;
+}
+
+/* ===== Optional Animations ===== */
+.fade-out {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#nodrag-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 999999;
+  -webkit-app-region: no-drag;
+  pointer-events: none; /* important! */
+}
+
+/* ===============================
+    ADMIN PAGE SUBNAV
+================================*/
+
+.admin-subnav {
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 0.75rem;
+}
+
+.admin-nav-btn {
+  font-size: 0.95rem;
+  padding: 0.4rem 0.75rem;
+}
+
+.admin-subnav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-subnav-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+/* ===============================
+    RECIPE LIST PAGE
+================================*/
+
+#recipe-list .card-header {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+#recipe-list .accordion-item {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+#recipe-list .accordion-button {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+#recipe-list .accordion-button:not(.collapsed) {
+  box-shadow: none;
+}
+
+#recipe-list table th,
+#recipe-list table td {
+  vertical-align: middle;
+}
+
+#recipe-list .card {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+#recipe-list tfoot th {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* ===============================
+    COMPONENT LIST PAGE
+================================*/
+
+#component-list .accordion-item {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+#component-list .accordion-button {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+#component-list .accordion-button:not(.collapsed) {
+  box-shadow: none;
+}
+
+#component-list table th,
+#component-list table td {
+  vertical-align: middle;
+}

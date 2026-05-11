@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "sku": "COF-8",
+    "name": "Coffee 8oz",
+    "category": "Drinks",
+    "price": 1.5,
+    "active": 1
+  },
+  {
+    "id": 2,
+    "sku": "COF-12",
+    "name": "Coffee 12oz",
+    "category": "Food",
+    "price": 2.0,
+    "active": 1
+  },
+  {
+    "id": 3,
+    "sku": "TEA",
+    "name": "Hot Tea",
+    "category": "Drinks",
+    "price": 3.0,
+    "active": 1
+  },
+  {
+    "id": 4,
+    "sku": "HOT-CHOC",
+    "name": "Hot Cocoa",
+    "category": "Drinks",
+    "price": 3.0,
+    "active": 1
+  },
+  {
+    "id": 5,
+    "sku": "PAS-SM",
+    "name": "Sm. Pastry",
+    "category": "Food",
+    "price": 2.0,
+    "active": 1
+  },
+  {
+    "id": 6,
+    "sku": "PAS-LG",
+    "name": "Lg. Pastry",
+    "category": "Food",
+    "price": 3.0,
+    "active": 1
+  },
+  {
+    "id": 7,
+    "sku": "SNA-CHEX",
+    "name": "Chex Mix",
+    "category": "Food",
+    "price": 2.0,
+    "active": 1
+  },
+  {
+    "id": 8,
+    "sku": "SNA-JERK",
+    "name": "Jerky Stick",
+    "category": "Food",
+    "price": 2.0,
+    "active": 1
+  },
+  {
+    "id": 9,
+    "sku": "SNA-BELV",
+    "name": "Belvita",
+    "category": "Food",
+    "price": 2.0,
+    "active": 1
+  },
+  {
+    "id": 10,
+    "sku": "SNA-COOK",
+    "name": "Cookie",
+    "category": "Food",
+    "price": 2.0,
+    "active": 1
+  }
+]

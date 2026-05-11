@@ -1,0 +1,407 @@
+{% extends "layout.html" %}
+{% block content %}
+{% include 'admin/_subnav.html' %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="m-0">Manage Components</h2>
+  <button id="toggleEdit" class="btn btn-secondary btn-sm" onclick="toggleEditMode()">✏️ Edit Mode</button>
+</div>
+
+<div class="card p-3 mb-4 shadow-sm">
+  <h5>Add Component from Inventory</h5>
+
+  <form onsubmit="addComponent(); return false;">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label">Inventory Item</label>
+        <input id="inventorySearch"
+               class="form-control mb-2"
+               placeholder="Search inventory..."
+               oninput="filterInventoryOptions()">
+
+        <select id="inventoryComponentSelect" class="form-select">
+          <option value="">Select Inventory Item...</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Nickname</label>
+        <input id="componentDisplayName"
+              class="form-control"
+              placeholder="Optional friendly name">
+      </div>
+
+      <div class="col-md-2">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" id="ctrack">
+          <label class="form-check-label" for="ctrack">
+            Track Sold-Out
+          </label>
+        </div>
+      </div>
+
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100">Add Component</button>
+      </div>
+    </div>
+  </form>
+
+  <small class="text-muted mt-2 d-block">
+    Components are linked to inventory by ID. You can rename inventory items without breaking recipe costs.
+  </small>
+</div>
+
+<div class="card p-3 shadow-sm">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="m-0">Component List</h5>
+      <small id="componentSummary" class="text-muted"></small>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+      <input id="componentSearch"
+             class="form-control form-control-sm"
+             style="max-width: 260px;"
+             placeholder="Search components..."
+             oninput="loadComponents()">
+
+      <select id="componentFilter"
+              class="form-select form-select-sm"
+              style="max-width: 200px;"
+              onchange="loadComponents()">
+        <option value="all">All Components</option>
+        <option value="tracked">Tracked Sold-Out</option>
+        <option value="untracked">Not Tracked</option>
+        <option value="used">Used In Recipes</option>
+        <option value="unused">Unused Components</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="component-list"></div>
+
+  <div id="saveAllBox" class="text-end mt-3" style="display:none;">
+    <button class="btn btn-success" onclick="saveAllComponents()">💾 Save All Changes</button>
+  </div>
+</div>
+
+<br>
+<br>
+
+<script>
+let editMode = false;
+let allInventory = [];
+let allComponents = [];
+
+function fmtCost(x) {
+  return `$${Number(x || 0).toFixed(4)}`;
+}
+
+function fmtQty(x) {
+  return Number(x || 0).toFixed(2).replace(/\.00$/, '');
+}
+
+function safeId(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function toggleEditMode() {
+  editMode = !editMode;
+  document.getElementById('toggleEdit').innerText = editMode ? '✅ Done Editing' : '✏️ Edit Mode';
+  document.getElementById('saveAllBox').style.display = editMode ? 'block' : 'none';
+  loadComponents();
+}
+
+async function loadInventoryDropdown() {
+  allInventory = await fetch('/api/admin/get_inventory').then(r => r.json());
+  renderInventoryOptions(allInventory);
+}
+
+function renderInventoryOptions(items) {
+  const select = document.getElementById('inventoryComponentSelect');
+  select.innerHTML = '<option value="">Select Inventory Item...</option>';
+
+  items.forEach(item => {
+    const opt = document.createElement('option');
+    opt.value = item.id;
+    opt.textContent = `${item.name} — ${fmtCost(item.unit_cost || 0)}`;
+    select.appendChild(opt);
+  });
+}
+
+function filterInventoryOptions() {
+  const q = document.getElementById('inventorySearch').value.toLowerCase();
+
+  const filtered = allInventory.filter(item =>
+    String(item.name || '').toLowerCase().includes(q)
+  );
+
+  renderInventoryOptions(filtered);
+}
+
+function loadComponents() {
+  fetch('/api/admin/get_components')
+    .then(r => r.json())
+    .then(rows => {
+      allComponents = rows;
+
+      const search = (document.getElementById('componentSearch')?.value || '').toLowerCase();
+      const filter = document.getElementById('componentFilter')?.value || 'all';
+
+      let filtered = rows.filter(r => {
+        const name = (r.name || '').toLowerCase();
+        const inventoryName = (r.inventory_name || '').toLowerCase();
+        const displayName = (r.display_name || '').toLowerCase();
+        const tracked = Number(r.pos_track_sellout || 0) === 1;
+        const usedCount = Number(r.used_in_count || 0);
+
+        if (
+          search &&
+          !name.includes(search) &&
+          !inventoryName.includes(search) &&
+          !displayName.includes(search)
+        ) return false;
+
+        if (filter === 'tracked' && !tracked) return false;
+        if (filter === 'untracked' && tracked) return false;
+        if (filter === 'used' && usedCount <= 0) return false;
+        if (filter === 'unused' && usedCount > 0) return false;
+
+        return true;
+      });
+
+      const trackedCount = rows.filter(r => Number(r.pos_track_sellout || 0) === 1).length;
+      const unusedCount = rows.filter(r => Number(r.used_in_count || 0) === 0).length;
+
+      document.getElementById('componentSummary').textContent =
+        `${rows.length} total • ${trackedCount} track sold-out • ${unusedCount} unused`;
+
+      if (filtered.length === 0) {
+        document.getElementById('component-list').innerHTML = `
+          <div class="text-muted p-3">
+            No components found.
+          </div>
+        `;
+        return;
+      }
+
+      let html = `<div class="accordion" id="componentAccordion">`;
+
+      filtered.forEach((r, index) => {
+        const inventoryName = r.inventory_name || r.name || '';
+        const displayName = r.display_name || inventoryName;
+
+        const collapseId = `component-${safeId(inventoryName)}-${index}`;
+        const headingId = `heading-${safeId(inventoryName)}-${index}`;
+        const usedIn = r.used_in || [];
+        const tracked = Number(r.pos_track_sellout || 0) === 1;
+
+        html += `
+          <div class="accordion-item mb-2 shadow-sm rounded overflow-hidden">
+            <h2 class="accordion-header" id="${headingId}">
+              <button class="accordion-button collapsed"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#${collapseId}"
+                      aria-expanded="false"
+                      aria-controls="${collapseId}">
+
+                <div class="d-flex justify-content-between align-items-center w-100 pe-3">
+                  <div>
+                    <strong>${displayName}</strong>
+                    ${r.display_name ? `<span class="text-muted small ms-2">${inventoryName}</span>` : ''}
+                    <span class="text-muted small ms-2">
+                      Used in ${Number(r.used_in_count || 0)} recipe${Number(r.used_in_count || 0) === 1 ? '' : 's'}
+                    </span>
+                    ${tracked ? '<span class="badge bg-success ms-2">Track Sold-Out</span>' : ''}
+                  </div>
+
+                  <div class="text-end">
+                    <span class="text-muted small">Unit Cost</span>
+                    <strong class="ms-2">${fmtCost(r.unit_cost)}</strong>
+                  </div>
+                </div>
+              </button>
+            </h2>
+
+            <div id="${collapseId}"
+                 class="accordion-collapse collapse"
+                 aria-labelledby="${headingId}"
+                 data-bs-parent="#componentAccordion">
+
+              <div class="accordion-body">
+                ${
+                  editMode
+                    ? `
+                      <div class="row g-2 align-items-end mb-3">
+                        <div class="col-md-6">
+                          <label class="form-label">Nickname</label>
+                          <input class="form-control form-control-sm"
+                                id="display-${r.id}"
+                                value="${r.display_name || ''}"
+                                placeholder="${inventoryName}">
+                          <small class="text-muted">
+                            Inventory name: ${inventoryName}
+                          </small>
+                        </div>
+
+                        <div class="col-md-3">
+                          <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   id="track-${r.id}"
+                                   ${tracked ? 'checked' : ''}>
+                            <label class="form-check-label" for="track-${r.id}">
+                              Track Sold-Out
+                            </label>
+                          </div>
+                        </div>
+
+                        <div class="col-md-3 text-end">
+                          <button class="btn btn-sm btn-danger"
+                                  onclick="deleteComponent(${r.id})">
+                            🗑️ Delete Component
+                          </button>
+                        </div>
+                      </div>
+                    `
+                    : ''
+                }
+
+                <div class="d-flex justify-content-between mb-2">
+                  <div>
+                    <strong>Used In</strong>
+                  </div>
+                  <div class="text-muted">
+                    Unit Cost: ${fmtCost(r.unit_cost)}
+                  </div>
+                </div>
+
+                ${
+                  usedIn.length
+                    ? `
+                      <table class="table table-sm table-striped mb-0">
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th class="text-end">Qty per Item</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${usedIn.map(u => `
+                            <tr>
+                              <td>${u.item_name || ''}</td>
+                              <td class="text-end">${fmtQty(u.qty_per_item)}</td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                    `
+                    : `<div class="text-muted">This component is not currently used in any recipes.</div>`
+                }
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div>`;
+
+      document.getElementById('component-list').innerHTML = html;
+    });
+}
+
+function addComponent() {
+  const inventoryId = document.getElementById('inventoryComponentSelect').value;
+
+  const payload = {
+    inventory_id: inventoryId ? parseInt(inventoryId) : null,
+    display_name: document.getElementById('componentDisplayName').value.trim(),
+    pos_track_sellout: document.getElementById('ctrack').checked ? 1 : 0
+  };
+
+  if (!payload.inventory_id) {
+    alert("Choose an inventory item.");
+    return;
+  }
+
+  fetch('/api/admin/add_component', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (!res.ok) {
+      alert("Could not add component.");
+      return;
+    }
+
+    document.getElementById('inventoryComponentSelect').value = '';
+    document.getElementById('inventorySearch').value = '';
+    document.getElementById('ctrack').checked = false;
+    document.getElementById('componentDisplayName').value = '';
+
+    loadInventoryDropdown();
+    loadComponents();
+  })
+  .catch(err => alert("Error adding component: " + err));
+}
+
+function saveAllComponents() {
+  const updates = allComponents.map(c => {
+    const displayEl = document.getElementById('display-' + c.id);
+    const trackEl = document.getElementById('track-' + c.id);
+
+    return {
+      id: c.id,
+      display_name: displayEl ? displayEl.value.trim() : (c.display_name || ''),
+      pos_track_sellout: trackEl ? (trackEl.checked ? 1 : 0) : Number(c.pos_track_sellout || 0)
+    };
+  });
+
+  fetch('/api/admin/update_components_batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ components: updates })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (!res.ok) {
+      alert("Could not save components.");
+      return;
+    }
+
+    alert("Components saved.");
+    loadComponents();
+  })
+  .catch(err => alert("Error saving components: " + err));
+}
+
+function deleteComponent(id) {
+  if (!confirm("Delete this component? This will also remove recipe links that use it.")) return;
+
+  fetch('/api/admin/delete_component', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (!res.ok) {
+      alert("Could not delete component.");
+      return;
+    }
+
+    loadComponents();
+  })
+  .catch(err => alert("Error deleting component: " + err));
+}
+
+loadInventoryDropdown();
+loadComponents();
+</script>
+{% endblock %}

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Loading BrewIns POS...</title>
+    <style>
+        body {
+            background: #f8e6c7;
+            font-family: Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+            color: #392413;
+        }
+
+        img {
+            width: 150px;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            font-size: 28px;
+            font-weight: 600;
+            animation: fadein 1s ease-in-out infinite alternate;
+        }
+
+        @keyframes fadein {
+            from { opacity: 0.4; }
+            to   { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <img src="/static/img/icon.png" alt="BrewIns POS Logo">
+    <div class="loading">Loading BrewIns POS...</div>
+</body>
+</html>

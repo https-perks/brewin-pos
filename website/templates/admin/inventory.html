@@ -1,0 +1,188 @@
+{% extends "layout.html" %}
+{% block content %}
+{% include 'admin/_subnav.html' %}
+
+<h2>Manage Inventory</h2>
+<form onsubmit="addInventory(); return false;" class="mb-3">
+    <input type="hidden" id="invId">
+    <div class="row g-2">
+        <div class="col-md-3">
+            <input id="invName" placeholder="Name" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <input id="invUnit" placeholder="Unit" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <input id="invCaseCost" type="number" step="0.01" placeholder="Case Cost" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <input id="invUnitsPerCase" type="number" step="0.01" placeholder="Units/Case" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <input id="invQty" type="number" step="0.01" placeholder="Qty on Hand" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <input id="invReorder" type="number" step="0.01" placeholder="Reorder Point" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-primary w-100">Add / Update</button>
+        </div>
+    </div>
+</form>
+<hr>
+<table id="inv-table"></table>
+<br>
+<br>
+
+<script>
+    function loadInventory() {
+        fetch('/api/inventory')
+            .then(r => r.json())
+            .then(rows => {
+                let html = `
+        <tr>
+          <th>Name</th>
+          <th>Unit</th>
+          <th>Case Cost</th>
+          <th>Units/Case</th>
+          <th>Unit Cost</th>
+          <th>Qty on Hand</th>
+          <th>Reorder Point</th>
+          <th>Actions</th>
+        </tr>
+      `;
+                rows.forEach(r => {
+                    let rowClass = "";
+                    let rowStyle = "";
+                    const q = Number(r.qty_on_hand ?? 0);
+                    const rp = Number(r.reorder_point ?? 0);
+
+                    if (q <= 0) {
+                        rowClass = "out-of-stock";
+                        rowStyle = 'style="background-color:#f8d7da;"';      // red
+                    } else if (q <= rp) {
+                        rowClass = "low-stock";
+                        rowStyle = 'style="background-color:#fff3cd;"';      // yellow
+                    }
+
+                    html += `
+                        <tr class="${rowClass}" ${rowStyle}>
+                        <td>${r.name || ''}</td>
+                        <td>${r.unit || ''}</td>
+                        <td>${r.case_cost ?? 0}</td>
+                        <td>${r.units_per_case ?? 0}</td>
+                        <td>$${Number(r.unit_cost ?? 0).toFixed(2)}</td>
+                        <td>${q}</td>
+                        <td>${rp}</td>
+                        <td class="d-flex gap-1">
+                            <button class="btn btn-sm btn-primary"
+                            data-id="${r.id}"
+                            data-name="${r.name || ''}"
+                            data-unit="${r.unit || ''}"
+                            data-case="${r.case_cost || 0}"
+                            data-units="${r.units_per_case || 0}"
+                            data-qty="${q}"
+                            data-reorder="${rp}"
+                            onclick="editInventoryFromButton(this)">✏️</button>
+                            <button class="btn btn-sm btn-danger"
+                            data-id="${r.id}"
+                            data-name="${r.name || ''}"
+                            onclick="deleteInventory(this)">🗑️</button>
+                        </td>
+                        </tr>`;
+                    });
+
+
+                document.getElementById('inv-table').innerHTML = html;
+            });
+    }
+
+    function editInventoryFromButton(btn) {
+        const data = btn.dataset;
+        editInventory(
+            data.id,
+            data.name,
+            data.unit,
+            parseFloat(data.case),
+            parseFloat(data.units),
+            parseFloat(data.qty),
+            parseFloat(data.reorder),
+        );
+    }
+
+    function editInventory(id, name, unit, caseCost, unitsPerCase, qty, reorder) {
+        document.getElementById('invId').value = id;
+        document.getElementById('invName').value = name;
+        document.getElementById('invUnit').value = unit;
+        document.getElementById('invCaseCost').value = caseCost;
+        document.getElementById('invUnitsPerCase').value = unitsPerCase;
+        document.getElementById('invQty').value = qty;
+        document.getElementById('invReorder').value = reorder;
+    }
+
+    function clearInventoryForm() {
+        ['invId', 'invName', 'invUnit', 'invCaseCost', 'invUnitsPerCase', 'invQty', 'invReorder'].forEach(id => {
+            document.getElementById(id).value = '';
+        });
+    }
+
+    function addInventory() {
+        const id = document.getElementById('invId').value;
+        const data = {
+            id: id ? parseInt(id) : null,
+            name: document.getElementById('invName').value.trim(),
+            unit: document.getElementById('invUnit').value.trim(),
+            case_cost: parseFloat(document.getElementById('invCaseCost').value || 0),
+            units_per_case: parseFloat(document.getElementById('invUnitsPerCase').value || 0),
+            qty_on_hand: parseFloat(document.getElementById('invQty').value || 0),
+            reorder_point: parseFloat(document.getElementById('invReorder').value || 0),
+        };
+
+        if (!data.name) {
+            alert('Please enter a name');
+            return;
+        }
+
+        // Use the server's inventory endpoints: updates use /api/inventory/update,
+        // but adds are handled by the admin route /api/admin/add_inventory
+        const url = id ? '/api/inventory/update' : '/api/admin/add_inventory';
+
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) {
+                alert("Inventory update failed.");
+                return;
+            }
+
+            clearInventoryForm();
+            loadInventory();
+        })
+        .catch(err => {
+            alert("Inventory update error: " + err);
+        });
+    }
+
+    function deleteInventory(btn) {
+        const id = btn.dataset.id;
+        const name = btn.dataset.name;
+
+        if (!confirm(`Delete inventory item "${name}"?`)) return;
+
+        fetch('/api/inventory/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        }).then(() => loadInventory());
+    }
+
+
+    // Initialize table
+    loadInventory();
+</script>
+
+{% endblock %}

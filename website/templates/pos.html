@@ -1,0 +1,955 @@
+{% extends "layout.html" %}
+{% block content %}
+<!-- Shift Start Modal -->
+<div class="modal fade" id="shiftModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Start Shift</h5>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Cashier Name</label>
+          <input id="shiftCashier" type="text" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Opening Float ($)</label>
+          <input id="shiftFloat" type="number" step="0.01" class="form-control" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="startShift()">Start Shift</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Close Shift Modal -->
+<div class="modal fade" id="closeShiftModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Close Shift</h5>
+      </div>
+      <div class="modal-body">
+        <p id="shiftSummary"></p>
+        <div class="mb-3">
+          <label class="form-label">Till Count ($)</label>
+          <input id="tillCount" type="number" step="0.01" class="form-control">
+        </div>
+        <p><strong>Expected Till:</strong> $<span id="expectedTill">0.00</span></p>
+        <p><strong>Over/Short:</strong> $<span id="overShort">0.00</span></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-danger" onclick="submitCloseShift()">Close Shift</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="m-0">POS Register</h2>
+  <button class="btn btn-danger" onclick="openCloseShiftModal()">Close Shift</button>
+</div>
+<div id="items" class="d-flex flex-wrap"></div>
+<hr>
+<h4>Cart</h4>
+<ul id="cart" class="list-group"></ul>
+<p class="mt-3">Total: $<span id="total">0.00</span></p><br>
+<button class="btn btn-warning" onclick="openDiscount()">Discount</button>
+<button class="btn btn-success" onclick="checkout()">Complete Sale</button>
+<div>
+  <hr>
+<button class="btn btn-secondary" onclick="clearDiscount()">Remove Manual Discount</button>
+</div>
+
+<!-- Discount PIN Modal -->
+<div class="modal fade" id="adminPinModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Manager PIN Required</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input id="adminPinInput" type="password" class="form-control" placeholder="Enter PIN">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="validateAdminPin()">Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sales Modal -->
+<div class="modal fade" id="salesModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title">Active Sales</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <div id="salesList"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Checkout Modal -->
+<div class="modal fade" id="checkoutModal" tabindex="-1" aria-labelledby="checkoutModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="checkoutModalLabel">Complete Sale</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <h6>Order Summary</h6>
+        <ul id="checkout-items" class="list-group mb-3"></ul>
+
+        <p class="fw-bold mt-3">Total: $<span id="checkout-total">0.00</span></p>
+
+        <div class="input-group mb-3">
+          <span class="input-group-text">Cash Given</span>
+          <input type="number" id="cashGiven" class="form-control" step="0.01" min="0">
+        </div>
+        <p class="fw-bold">Change Due: $<span id="changeDue">0.00</span></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="confirmCheckout">Confirm Sale</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let shiftModal;
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    shiftModal = new bootstrap.Modal(document.getElementById('shiftModal'));
+    const shift = await fetch('/api/shift/active').then(r => r.json());
+    if (!shift.id) {
+      // No shift active — force modal
+      shiftModal.show();
+    }
+    checkShiftLock();
+  });
+
+  async function startShift() {
+    const cashier = document.getElementById('shiftCashier').value.trim();
+    const opening = parseFloat(document.getElementById('shiftFloat').value || 0);
+    if (!cashier || isNaN(opening)) {
+      alert("Please fill out both fields.");
+      return;
+    }
+
+    await fetch('/api/shift/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cashier, opening_float: opening })
+    }).then(r => {
+      if (!r.ok) throw new Error("Failed to start shift.");
+      return r.json();
+    });
+
+    alert(`Shift started for ${cashier} with $${opening.toFixed(2)} float.`);
+    shiftModal.hide();
+    checkShiftLock();
+  }
+
+  async function checkShiftLock() {
+    const shift = await fetch('/api/shift/active').then(r => r.json());
+    activeCashier = shift.cashier || null;
+    if (!shift.id) {
+      document.getElementById('items').style.pointerEvents = 'none';
+      document.getElementById('items').style.opacity = '0.3';
+    } else {
+      document.getElementById('items').style.pointerEvents = 'auto';
+      document.getElementById('items').style.opacity = '1';
+    }
+  }
+
+
+  let items = [];
+  let cart = [];
+
+  // Load items and render buttons
+  function loadPOSItems() {
+    fetch('/api/items')
+      .then(r => r.json())
+      .then(data => {
+        items = data;
+        const div = document.getElementById('items');
+        div.innerHTML = ''; // Clear old buttons
+
+        data.forEach(it => {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-lg m-2 w-100';
+
+          if (it.in_stock) {
+            btn.classList.add('btn-primary');
+            const label = it.available_qty < 5
+              ? `${it.name} — $${it.price.toFixed(2)} (${it.available_qty} left)`
+              : `${it.name} — $${it.price.toFixed(2)}`;
+            btn.textContent = label;
+            btn.onclick = () => add(it);
+          } else {
+            btn.classList.add('btn-secondary');
+            btn.disabled = true;
+            btn.textContent = `${it.name} — Out of Stock (0 left)`;
+          }
+
+          if (it.in_stock && it.available_qty <= 3) {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-warning');
+          }
+
+          div.appendChild(btn);
+        });
+      });
+  }
+
+  function add(it) {
+    const existing = cart.find(l => l.id === it.id);
+    const inCartQty = existing ? existing.qty : 0;
+
+    // Check if adding another exceeds available stock
+    if (it.available_qty !== undefined && inCartQty + 1 > it.available_qty) {
+      alert(`⚠️ Only ${it.available_qty} of "${it.name}" in stock.`);
+      return;
+    }
+
+    if (existing) existing.qty++;
+    else cart.push({
+        id: it.id,
+        sku: it.sku,
+        name: it.name,
+        category: it.category,
+        price: it.price,
+        available_qty: it.available_qty,
+        qty: 1
+    });
+
+    renderCart();
+  }
+
+
+  let activeCashier = null;
+
+//-----------------------------------------------------------------------------------
+// Discount Logic
+//-----------------------------------------------------------------------------------
+  let discount = 0;
+  let discount_type = null;
+
+  let activeSales = [];
+
+  let autoSaleResult = null;
+  let manualSale = null;
+  let manualSaleResult = null;
+  let manualDiscountAuth = null;
+
+  let adminPinModal;
+  let securityAuthorizedForSale = false;
+
+  document.addEventListener("DOMContentLoaded", () => {
+    adminPinModal = new bootstrap.Modal(document.getElementById('adminPinModal'));
+  });
+
+  let posSettings = {
+    require_pin_discounts: false,
+    tax_rate: 0
+  };
+
+  fetch('/api/admin/settings')
+    .then(r => r.json())
+    .then(s => posSettings = s);
+
+  function openDiscount() {
+    if (!posSettings.require_pin_discounts) {
+      openSalePicker();
+      return;
+    }
+
+    if (securityAuthorizedForSale) {
+      openSalePicker();
+      return;
+    }
+
+    document.getElementById('adminPinInput').value = "";
+    adminPinModal.show();
+  }
+
+  function validateAdminPin() {
+    const pin = document.getElementById('adminPinInput').value.trim();
+
+    fetch('/api/security/validate_pin', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ pin })
+    })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.ok) {
+        alert("Incorrect PIN.");
+        return;
+      }
+
+      securityAuthorizedForSale = true;
+      manualDiscountAuth = {
+        pin_id: res.pin_id || null,
+        pin_label: res.pin_label || "Authorized PIN"
+      };
+
+      adminPinModal.hide();
+      openSalePicker();
+    })
+    .catch(err => {
+      alert("Could not validate PIN: " + err);
+    });
+  }
+
+  let salesModal;
+
+  document.addEventListener("DOMContentLoaded", () => {
+      salesModal = new bootstrap.Modal(document.getElementById('salesModal'));
+  });
+
+function openSalePicker() {
+  const div = document.getElementById("salesList");
+  div.innerHTML = "<p class='text-muted'>Loading sales...</p>";
+
+  fetch("/api/sales")
+    .then(r => r.json())
+    .then(list => {
+      activeSales = list;
+
+      const manualSales = list.filter(s => Number(s.auto_apply || 0) !== 1);
+
+      div.innerHTML = "";
+
+      if (manualSales.length === 0) {
+        div.innerHTML = "<p class='text-muted'>No manual sales available.</p>";
+        return;
+      }
+
+      manualSales.forEach(sale => {
+        const btn = document.createElement("button");
+        btn.className = "btn btn-outline-primary w-100 mb-2";
+
+        let label = sale.name;
+
+        if (sale.sale_type === "DOLLAR_OFF") {
+          label += ` — $${Number(sale.amount || 0).toFixed(2)} off`;
+        } else if (sale.sale_type === "PERCENT_OFF") {
+          label += ` — ${Number(sale.amount || 0)}% off order`;
+        } else if (sale.sale_type === "PERCENT_OFF_ITEM") {
+          label += ` — ${Number(sale.amount || 0)}% off ${sale.item_name || "item"}`;
+        } else if (sale.sale_type === "PERCENT_OFF_CATEGORY") {
+          label += ` — ${Number(sale.amount || 0)}% off ${sale.category || "category"}`;
+        } else if (sale.sale_type === "BOGO_ITEM") {
+          label += ` — Buy ${sale.buy_qty || 1}, Get ${sale.free_qty || 1} ${sale.item_name || ""} Free`;
+        } else if (sale.sale_type === "COMBO_PRICE") {
+          label += ` — Combo for $${Number(sale.amount || 0).toFixed(2)}`;
+        }
+
+        btn.textContent = label;
+        btn.onclick = () => applySaleDiscount(sale);
+        div.appendChild(btn);
+      });
+    })
+    .catch(err => {
+      div.innerHTML = "<p class='text-danger'>Could not load sales.</p>";
+      console.error(err);
+    });
+
+  salesModal.show();
+}
+
+function applySaleDiscount(sale) {
+  manualSale = sale;
+
+  recalculateDiscounts();
+
+  if (!manualSaleResult) {
+    alert(`${sale.name} does not apply to the current cart.`);
+    manualSale = null;
+    recalculateDiscounts();
+    renderCart();
+    return;
+  }
+
+  salesModal.hide();
+  renderCart();
+}
+
+function clearDiscount() {
+  manualSale = null;
+  manualSaleResult = null;
+  manualDiscountAuth = null;
+  recalculateDiscounts();
+  renderCart();
+}
+
+function getSubtotal() {
+  return cart.reduce((t, i) => t + (Number(i.qty || 0) * Number(i.price || 0)), 0);
+}
+
+function getCategorySubtotal(category) {
+  return cart
+    .filter(i => i.category === category)
+    .reduce((t, i) => t + (Number(i.qty || 0) * Number(i.price || 0)), 0);
+}
+
+function evaluateSale(sale, baseSubtotal = null) {
+  const subtotal = getSubtotal();
+  const base = baseSubtotal == null ? subtotal : Math.max(0, Number(baseSubtotal || 0));
+
+  let amount = 0;
+
+  if (subtotal <= 0 || base <= 0) {
+    return {
+      sale,
+      discount: 0,
+      total: subtotal,
+      eligible: false
+    };
+  }
+
+  if (sale.sale_type === "DOLLAR_OFF") {
+    amount = Number(sale.amount || 0);
+  }
+
+  else if (sale.sale_type === "PERCENT_OFF") {
+    amount = base * (Number(sale.amount || 0) / 100);
+  }
+
+  else if (sale.sale_type === "PERCENT_OFF_ITEM") {
+    const target = cart.find(i => Number(i.id) === Number(sale.item_id));
+
+    if (!target) {
+      return { sale, discount: 0, total: subtotal, eligible: false };
+    }
+
+    const itemSubtotal = Number(target.qty || 0) * Number(target.price || 0);
+    amount = itemSubtotal * (Number(sale.amount || 0) / 100);
+  }
+
+  else if (sale.sale_type === "PERCENT_OFF_CATEGORY") {
+    const categorySubtotal = getCategorySubtotal(sale.category);
+
+    if (categorySubtotal <= 0) {
+      return { sale, discount: 0, total: subtotal, eligible: false };
+    }
+
+    amount = categorySubtotal * (Number(sale.amount || 0) / 100);
+  }
+
+  else if (sale.sale_type === "BOGO_ITEM") {
+    const target = cart.find(i => Number(i.id) === Number(sale.item_id));
+
+    const buyQty = Math.max(1, Number(sale.buy_qty || 1));
+    const freeQty = Math.max(1, Number(sale.free_qty || 1));
+    const groupSize = buyQty + freeQty;
+
+    if (!target || Number(target.qty || 0) < groupSize) {
+      return { sale, discount: 0, total: subtotal, eligible: false };
+    }
+
+    const eligibleGroups = Math.floor(Number(target.qty || 0) / groupSize);
+    const freeItems = eligibleGroups * freeQty;
+
+    amount = freeItems * Number(target.price || 0);
+  }
+
+  else if (sale.sale_type === "COMBO_PRICE") {
+    const requirements = sale.requirements || [];
+
+    if (requirements.length === 0) {
+      return { sale, discount: 0, total: subtotal, eligible: false };
+    }
+
+    let eligibleGroups = Infinity;
+    let normalGroupPrice = 0;
+
+    for (const req of requirements) {
+      const reqQty = Math.max(1, Number(req.qty || 1));
+      let matchingQty = 0;
+      let unitPrices = [];
+
+      if (req.requirement_type === "ITEM") {
+        const item = cart.find(i => Number(i.id) === Number(req.item_id));
+
+        if (!item) {
+          return { sale, discount: 0, total: subtotal, eligible: false };
+        }
+
+        matchingQty = Number(item.qty || 0);
+        unitPrices = Array(matchingQty).fill(Number(item.price || 0));
+      }
+
+      else if (req.requirement_type === "CATEGORY") {
+        const matchingItems = cart.filter(i => i.category === req.category);
+
+        matchingItems.forEach(item => {
+          const qty = Number(item.qty || 0);
+          matchingQty += qty;
+
+          for (let n = 0; n < qty; n++) {
+            unitPrices.push(Number(item.price || 0));
+          }
+        });
+      }
+
+      if (matchingQty < reqQty) {
+        return { sale, discount: 0, total: subtotal, eligible: false };
+      }
+
+      eligibleGroups = Math.min(
+        eligibleGroups,
+        Math.floor(matchingQty / reqQty)
+      );
+
+      unitPrices.sort((a, b) => b - a);
+
+      const selectedPrices = unitPrices.slice(0, reqQty);
+      normalGroupPrice += selectedPrices.reduce((t, p) => t + p, 0);
+    }
+
+    if (!Number.isFinite(eligibleGroups) || eligibleGroups <= 0) {
+      return { sale, discount: 0, total: subtotal, eligible: false };
+    }
+
+    const comboPrice = Number(sale.amount || 0);
+    const savingsPerGroup = normalGroupPrice - comboPrice;
+
+    if (savingsPerGroup <= 0) {
+      return { sale, discount: 0, total: subtotal, eligible: false };
+    }
+
+    amount = savingsPerGroup * eligibleGroups;
+  }
+
+  amount = Math.min(Math.max(amount, 0), base);
+
+  return {
+    sale,
+    discount: amount,
+    total: subtotal - amount,
+    eligible: amount > 0
+  };
+}
+
+function findBestAutomaticSale() {
+  const subtotal = getSubtotal();
+
+  if (subtotal <= 0) return null;
+
+  let best = null;
+
+  activeSales
+    .filter(s => Number(s.auto_apply || 0) === 1)
+    .forEach(sale => {
+      const result = evaluateSale(sale, subtotal);
+
+      if (!result.eligible) return;
+
+      if (!best || result.discount > best.discount) {
+        best = result;
+      }
+    });
+
+  return best;
+}
+
+function recalculateDiscounts() {
+  const subtotal = getSubtotal();
+
+  autoSaleResult = findBestAutomaticSale();
+
+  const autoDiscount = autoSaleResult ? Number(autoSaleResult.discount || 0) : 0;
+  const subtotalAfterAuto = Math.max(0, subtotal - autoDiscount);
+
+  manualSaleResult = null;
+
+  if (manualSale) {
+    manualSaleResult = evaluateSale(manualSale, subtotalAfterAuto);
+
+    if (!manualSaleResult.eligible) {
+      manualSaleResult = null;
+    }
+  }
+
+  const manualDiscount = manualSaleResult ? Number(manualSaleResult.discount || 0) : 0;
+
+  discount = Math.min(autoDiscount + manualDiscount, subtotal);
+
+  const labels = [];
+
+  if (autoSaleResult) {
+    labels.push(`AUTO: ${autoSaleResult.sale.name}`);
+  }
+
+  if (manualSaleResult) {
+    labels.push(`MANUAL: ${manualSaleResult.sale.name}`);
+  }
+
+  discount_type = labels.length ? labels.join(" + ") : null;
+}
+
+async function loadActiveSales() {
+  try {
+    activeSales = await fetch('/api/sales').then(r => r.json());
+  } catch (err) {
+    console.error("Could not load active sales:", err);
+    activeSales = [];
+  }
+
+  recalculateDiscounts();
+  renderCart();
+}
+
+function getDiscountDetails() {
+  const details = [];
+
+  if (autoSaleResult) {
+    details.push({
+      sale_id: autoSaleResult.sale.id || null,
+      sale_name: autoSaleResult.sale.name || "Automatic Sale",
+      sale_type: autoSaleResult.sale.sale_type || null,
+      source: "AUTO",
+      amount: Number(autoSaleResult.discount || 0),
+      authorized_pin_id: null,
+      authorized_pin_label: null
+    });
+  }
+
+  if (manualSaleResult) {
+    details.push({
+      sale_id: manualSaleResult.sale.id || null,
+      sale_name: manualSaleResult.sale.name || "Manual Sale",
+      sale_type: manualSaleResult.sale.sale_type || null,
+      source: "MANUAL",
+      amount: Number(manualSaleResult.discount || 0),
+      authorized_pin_id: manualDiscountAuth?.pin_id || null,
+      authorized_pin_label: manualDiscountAuth?.pin_label || null
+    });
+  }
+
+  return details;
+}
+
+//--------------------------------------------------------------------------------
+// Tax and Final Total Calculations
+//--------------------------------------------------------------------------------
+function getTaxableTotal() {
+  return Math.max(0, getSubtotal() - discount);
+}
+
+function getTaxAmount() {
+  const rate = Number(posSettings.tax_rate || 0);
+  return Math.round(getTaxableTotal() * rate * 100) / 100;
+}
+
+function getFinalTotal() {
+  return Math.max(0, getTaxableTotal() + getTaxAmount());
+}
+
+//--------------------------------------------------------------------------------
+// Cart Rendering and Management
+//--------------------------------------------------------------------------------
+
+  function renderCart() {
+    recalculateDiscounts();
+
+    const ul = document.getElementById('cart');
+    ul.innerHTML = '';
+    let total = 0;
+
+    cart.forEach(l => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap';
+
+      const leftDiv = document.createElement('div');
+      leftDiv.className = 'd-flex align-items-center gap-2';
+
+      // Quantity controls
+      const minusBtn = document.createElement('button');
+      minusBtn.className = 'btn btn-sm btn-outline-secondary';
+      minusBtn.textContent = '−';
+      minusBtn.onclick = () => updateQty(l.id, l.qty - 1);
+
+      const qtySpan = document.createElement('span');
+      qtySpan.textContent = `x${l.qty}`;
+
+      const plusBtn = document.createElement('button');
+      plusBtn.className = 'btn btn-sm btn-outline-secondary';
+      plusBtn.textContent = '+';
+      plusBtn.onclick = () => updateQty(l.id, l.qty + 1);
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = l.name;
+
+      leftDiv.append(minusBtn, qtySpan, plusBtn, nameSpan);
+
+      // Price + delete
+      const rightDiv = document.createElement('div');
+      rightDiv.className = 'd-flex align-items-center gap-2';
+      const priceSpan = document.createElement('span');
+      priceSpan.textContent = `$${(l.qty * l.price).toFixed(2)}`;
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-sm btn-danger';
+      delBtn.textContent = '🗑';
+      delBtn.onclick = () => removeFromCart(l.id);
+
+      rightDiv.append(priceSpan, delBtn);
+
+      li.append(leftDiv, rightDiv);
+      ul.appendChild(li);
+
+      total += l.qty * l.price;
+    });
+
+    document.getElementById('total').textContent = getFinalTotal().toFixed(2)
+    if (autoSaleResult) {
+      const disc = document.createElement('li');
+      disc.className = "list-group-item d-flex justify-content-between bg-info-subtle";
+      disc.innerHTML = `
+          <strong>Auto Sale (${autoSaleResult.sale.name})</strong>
+          <span>-$${Number(autoSaleResult.discount || 0).toFixed(2)}</span>
+      `;
+      ul.appendChild(disc);
+    }
+
+    if (manualSaleResult) {
+      const disc = document.createElement('li');
+      disc.className = "list-group-item d-flex justify-content-between bg-warning-subtle";
+      disc.innerHTML = `
+          <strong>Manual Sale (${manualSaleResult.sale.name})</strong>
+          <span>-$${Number(manualSaleResult.discount || 0).toFixed(2)}</span>
+      `;
+      ul.appendChild(disc);
+    }
+
+    // If the cart is empty, clear discount + per-sale PIN authorization
+    if (cart.length === 0) {
+      securityAuthorizedForSale = false;
+      manualSale = null;
+      manualSaleResult = null;
+      autoSaleResult = null;
+      discount = 0;
+      discount_type = null;
+    }
+  }
+//--------------------------------------------------------------------------------
+// Cart Rendering and Management
+//--------------------------------------------------------------------------------
+
+  function updateQty(id, newQty) {
+    const item = cart.find(i => i.id === id);
+    if (!item) return;
+
+    // Enforce stock limit
+    if (newQty > item.available_qty) {
+      alert(`⚠️ Only ${item.available_qty} of "${item.name}" in stock.`);
+      newQty = item.available_qty;
+    }
+
+    // Remove item if qty is 0
+    if (newQty <= 0) {
+      cart = cart.filter(i => i.id !== id);
+    } else {
+      item.qty = newQty;
+    }
+
+    renderCart();
+  }
+
+  function removeFromCart(id) {
+    cart = cart.filter(i => i.id !== id);
+    renderCart();
+  }
+
+  let checkoutModal;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    checkoutModal = new bootstrap.Modal(document.getElementById('checkoutModal'));
+    document.getElementById('cashGiven').addEventListener('input', updateChange);
+    document.getElementById('confirmCheckout').addEventListener('click', confirmCheckout);
+  });
+
+  function checkout() {
+    recalculateDiscounts();
+
+    if (cart.length === 0) {
+      alert("Cart is empty.");
+      return;
+    }
+
+    // Fill modal with order info
+    const list = document.getElementById('checkout-items');
+    list.innerHTML = '';
+    let total = 0;
+    cart.forEach(l => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item d-flex justify-content-between';
+      li.innerHTML = `${l.name} x${l.qty} <span>$${(l.qty * l.price).toFixed(2)}</span>`;
+      list.appendChild(li);
+      total += l.qty * l.price;
+    });
+
+    document.getElementById('checkout-total').textContent = getFinalTotal().toFixed(2);
+    document.getElementById('cashGiven').value = '';
+    document.getElementById('changeDue').textContent = '0.00';
+
+    checkoutModal.show();
+  }
+
+  function updateChange() {
+    const total = parseFloat(document.getElementById('checkout-total').textContent);
+    const cash = parseFloat(document.getElementById('cashGiven').value || 0);
+    const change = Math.max(0, cash - total);
+    document.getElementById('changeDue').textContent = change.toFixed(2);
+  }
+
+  function confirmCheckout() {
+    recalculateDiscounts();
+
+    const total = parseFloat(document.getElementById('checkout-total').textContent);
+    const cash = parseFloat(document.getElementById('cashGiven').value || 0);
+    const change = Math.max(0, cash - total);
+
+    if (cash < total) {
+      alert("Not enough cash to complete sale.");
+      return;
+    }
+
+    const payload = {
+      cashier: activeCashier || "Unknown",
+      method: "Cash",
+      lines: cart.map(c => ({
+        // Use SKU when present, otherwise fall back to the item name
+        item_sku: c.sku || c.name,
+        qty: c.qty
+      })),
+      discount:discount,
+      discount_type: discount_type || null,
+      discount_details: getDiscountDetails(),
+      cash_given: cash,
+      change_given: change
+    };
+
+    fetch('/api/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(r => r.json())
+      .then(res => {
+        if (res.error) {
+          alert("Error from server: " + res.error);
+          return;
+        }
+
+        checkoutModal.hide();
+
+        const receiptNo = (res && res.receipt_no != null) ? res.receipt_no : res.order_id;
+
+        alert(
+          `✅ Sale Complete!\n` +
+          `Order #${receiptNo}\n` +
+          `Total: $${Number(res.total ?? total).toFixed(2)}\n` +
+          `Change Due: $${change.toFixed(2)}`
+        );
+
+        cart = [];
+        renderCart && renderCart();
+        loadPOSItems && loadPOSItems();
+        loadActiveSales && loadActiveSales();
+        document.getElementById('cashGiven').value = '';
+        document.getElementById('changeDue').textContent = '0.00';
+        manualSale = null;
+        manualSaleResult = null;
+        autoSaleResult = null;
+        securityAuthorizedForSale = false;
+        discount = 0;
+        discount_type = null;
+        manualDiscountAuth = null;
+      })
+      .catch(err => alert("Error: " + err));
+  }
+
+  // Auto-refresh every 30 seconds
+setInterval(() => {
+  loadPOSItems();
+  loadActiveSales();
+}, 30000);
+  loadPOSItems();
+  loadActiveSales();
+
+  let closeShiftModal;
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    closeShiftModal = new bootstrap.Modal(document.getElementById('closeShiftModal'));
+    // ... existing shiftModal init ...
+  });
+
+  async function openCloseShiftModal() {
+    const shift = await fetch('/api/shift/active').then(r => r.json());
+    if (!shift.id) {
+      alert("No active shift to close.");
+      return;
+    }
+
+    // Get cash sales + expected till
+    const res = await fetch('/api/reports/cash_summary').then(r => r.json()).catch(() => null);
+    const expected = res?.expected || 0;
+
+    const started = new Date(shift.ts_start).toLocaleString();
+    document.getElementById('shiftSummary').innerText =
+      `Cashier: ${shift.cashier}\nStarted: ${started}`;
+    document.getElementById('expectedTill').textContent = expected.toFixed(2);
+    document.getElementById('tillCount').value = '';
+    document.getElementById('overShort').textContent = '0.00';
+
+    closeShiftModal.show();
+  }
+
+  function calcOverShort() {
+    const expected = parseFloat(document.getElementById('expectedTill').textContent) || 0;
+    const actual = parseFloat(document.getElementById('tillCount').value) || 0;
+    document.getElementById('overShort').textContent = (actual - expected).toFixed(2);
+  }
+
+  document.getElementById('tillCount').addEventListener('input', calcOverShort);
+
+  async function submitCloseShift() {
+    const actual = parseFloat(document.getElementById('tillCount').value || 0);
+    const res = await fetch('/api/shift/close', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actual_cash: actual })
+    }).then(r => r.json());
+
+    closeShiftModal.hide();
+    alert(
+      `Shift Closed!\n` +
+      `Cashier: ${res.cashier}\n` +
+      `Expected: $${res.expected}\n` +
+      `Actual: $${res.actual}\n` +
+      `Over/Short: $${res.over_short}`
+    );
+
+    // Optionally reload or disable POS buttons until a new shift is started
+    location.reload();
+  }
+</script>
+
+{% endblock %}
