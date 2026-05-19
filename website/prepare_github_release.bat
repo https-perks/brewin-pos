@@ -1,53 +1,43 @@
 @echo off
 setlocal
 
-REM Read version
 set /p VERSION=<version.txt
 
 echo Preparing GitHub release %VERSION%...
 
-REM Make sure release EXE exists
 if not exist release\BrewInsPOS_%VERSION%.exe (
     echo ERROR: Build the app first using build_pos_exe.bat
     pause
-    exit /b
+    exit /b 1
 )
-
-REM --------------------------------------------------------
-REM Update Inno Setup .iss file
-REM --------------------------------------------------------
 
 set "INNO_FILE=..\brewins_pos_installer.iss"
 
-if exist "%INNO_FILE%" (
-    echo Updating Inno Setup script...
-
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-      "$p = '%INNO_FILE%';" ^
-      "$v = '%VERSION%';" ^
-      "$lines = Get-Content $p;" ^
-      "$lines = $lines | ForEach-Object {" ^
-      "  if ($_ -match '^AppVersion=') { 'AppVersion=' + $v }" ^
-      "  elseif ($_ -match '^OutputBaseFilename=') { 'OutputBaseFilename=BrewIns_POS_Setup_' + $v }" ^
-      "  elseif ($_ -match 'Source: ""website\\release\\BrewInsPOS_.*\.exe""') { 'Source: ""website\release\BrewInsPOS_' + $v + '.exe""; DestDir: ""{app}""; DestName: ""BrewInsPOS.exe""; Flags: ignoreversion' }" ^
-      "  else { $_ }" ^
-      "};" ^
-      "Set-Content -Path $p -Value $lines -Encoding UTF8"
-
-    if errorlevel 1 (
-        echo ERROR: Failed to update Inno Setup script.
-        pause
-        exit /b 1
-    )
-) else (
+if not exist "%INNO_FILE%" (
     echo ERROR: Inno Setup script not found at %INNO_FILE%
     pause
     exit /b 1
 )
 
-REM --------------------------------------------------------
-REM Build installer with Inno Setup
-REM --------------------------------------------------------
+echo Updating Inno Setup script...
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$p = '%INNO_FILE%';" ^
+  "$v = '%VERSION%';" ^
+  "$lines = Get-Content $p;" ^
+  "$lines = $lines | ForEach-Object {" ^
+  "  if ($_ -match '^AppVersion=') { 'AppVersion=' + $v }" ^
+  "  elseif ($_ -match '^OutputBaseFilename=') { 'OutputBaseFilename=BrewIns_POS_Setup_' + $v }" ^
+  "  elseif ($_ -match 'Source: ""website\\release\\BrewInsPOS_.*\.exe""') { 'Source: ""website\release\BrewInsPOS_' + $v + '.exe""; DestDir: ""{app}""; DestName: ""BrewInsPOS.exe""; Flags: ignoreversion' }" ^
+  "  else { $_ }" ^
+  "};" ^
+  "Set-Content -Path $p -Value $lines -Encoding UTF8"
+
+if errorlevel 1 (
+    echo ERROR: Failed to update Inno Setup script.
+    pause
+    exit /b 1
+)
 
 echo Building installer with Inno Setup...
 
@@ -59,14 +49,6 @@ if not exist "%ISCC%" (
 
 if not exist "%ISCC%" (
     echo ERROR: Could not find ISCC.exe.
-    echo Check your Inno Setup install path.
-    pause
-    exit /b 1
-)
-
-if not exist "%INNO_FILE%" (
-    echo ERROR: Inno Setup script not found:
-    echo %INNO_FILE%
     pause
     exit /b 1
 )
@@ -79,12 +61,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Installer build complete.
+set "INSTALLER=..\Output\BrewIns_POS_Setup_%VERSION%.exe"
 
-
-REM --------------------------------------------------------
-REM Update version.json automatically
-REM --------------------------------------------------------
+if exist "%INSTALLER%" (
+    copy /Y "%INSTALLER%" "release\BrewIns_POS_Setup_%VERSION%.exe" >nul
+) else (
+    echo WARNING: Installer was not found at:
+    echo %INSTALLER%
+)
 
 echo Updating version.json...
 
@@ -95,21 +79,20 @@ echo   "download_url": "https://github.com/https-perks/brewin-pos/releases/downl
 echo }
 )> version.json
 
-REM Copy version.json to release folder for convenience
-copy /y version.json release\version_%VERSION%.json >nul
+copy /Y version.json release\version_%VERSION%.json >nul
 
 echo --------------------------------------------------------
 echo GitHub Release Prep Complete!
-echo
-echo Updated:
-echo   version.json
-echo   %INNO_FILE%
-echo
-echo Upload the following file to your GitHub Release:
+echo.
+echo Upload BOTH files to GitHub Release v%VERSION%:
 echo   release\BrewInsPOS_%VERSION%.exe
-echo
-echo Then commit and push your updated version.json and .iss:
-echo   git add version.json ../BrewIns_POS_Setup.iss
+echo   release\BrewIns_POS_Setup_%VERSION%.exe
+echo.
+echo version.json points to:
+echo   BrewInsPOS_%VERSION%.exe
+echo.
+echo Commit:
+echo   git add version.json ../brewins_pos_installer.iss
 echo   git commit -m "Release v%VERSION%"
 echo   git push
 echo --------------------------------------------------------

@@ -43,22 +43,18 @@ def log(msg: str):
 
 
 # ---------------------------------------------------------------------
-# Connection (PyInstaller-safe paths)
+# Connection (PyInstaller-safe writable DB path)
 # ---------------------------------------------------------------------
 
-# Determine base directory depending on whether we're frozen
 if getattr(sys, 'frozen', False):
-    # Running inside EXE — store DB in writable LocalAppData
     BASE_DIR = Path(os.environ["LOCALAPPDATA"]) / "BrewInsPOS"
 else:
-    # Source mode — project root, because this file is backend/db_ops.py
     BASE_DIR = Path(__file__).resolve().parent.parent
 
 DB_FILE = BASE_DIR / "backend" / "pos.db"
+DB_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-# Alias for backup/restore helpers that expect DB_PATH
 DB_PATH = str(DB_FILE)
-
 
 def connect():
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)

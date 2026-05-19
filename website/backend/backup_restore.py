@@ -7,19 +7,26 @@ from pathlib import Path
 # ------------------------------------------------------------
 def _base_dir():
     if getattr(sys, "frozen", False):
-        # Installed EXE: always store DB in LocalAppData\BrewInsPOS
         return Path(os.environ["LOCALAPPDATA"]) / "BrewInsPOS"
-    else:
-        # Running from source
-        return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[1]
 
 BASE_DIR = _base_dir()
 
-DB_FILE     = BASE_DIR / "backend" / "pos.db"
-MODELS_SQL  = BASE_DIR / "backend" / "models.sql"
+DB_FILE = BASE_DIR / "backend" / "pos.db"
+DB_FILE.parent.mkdir(parents=True, exist_ok=True)
 
+MODELS_SQL = BASE_DIR / "backend" / "models.sql"
 
-CATALOG_TABLES = ["items", "components", "inventory", "recipes"]  # order matters on restore
+CATALOG_TABLES = [
+    "inventory",
+    "items",
+    "components",
+    "recipes",
+    "sales",
+    "sale_requirements",
+    "settings",
+    "flavors",
+]
 
 def _connect(db_path=DB_FILE):
     con = sqlite3.connect(db_path)

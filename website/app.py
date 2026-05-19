@@ -28,7 +28,7 @@ def log(msg):
             f.write(f"[{ts}] {msg}\n")
     except:
         pass
-    
+
 APP_LOG = _log_path()
 
 def app_log(msg: str):
@@ -38,14 +38,46 @@ def app_log(msg: str):
             f.write(f"[{ts}] {msg}\n")
     except:
         pass
-    
-def debug_paths():
-    base = None
-    if getattr(sys, 'frozen', False):
-        base = Path(sys._MEIPASS)
-    else:
-        base = Path(__file__).resolve().parent
 
+
+# ---------------------------------------------------------------------
+# PATHS
+# ---------------------------------------------------------------------
+
+def _resource_dir():
+    """
+    Read-only app resources:
+    - Source mode: website folder
+    - Frozen EXE: PyInstaller temp bundle folder (_MEIPASS)
+
+    Flask templates/static should load from here.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent
+
+
+def _app_dir():
+    """
+    Writable installed app data:
+    - Source mode: website folder
+    - Frozen EXE: LocalAppData/BrewInsPOS
+
+    Exports/logs/database should live here.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(os.environ["LOCALAPPDATA"]) / "BrewInsPOS"
+    return Path(__file__).resolve().parent
+
+
+RESOURCE_DIR = _resource_dir()
+APP_DIR = _app_dir()
+
+EXPORT_DIR = APP_DIR / "exports"
+EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def debug_paths():
     exe_dir = Path(sys.executable).resolve().parent
     cwd = Path(os.getcwd())
 
@@ -54,12 +86,13 @@ def debug_paths():
     log(f"[PATH] exe_dir={exe_dir}")
     log(f"[PATH] cwd={cwd}")
     log(f"[PATH] file_dir={Path(__file__).resolve().parent}")
-    log(f"[PATH] base_chosen={base}")
+    log(f"[PATH] RESOURCE_DIR={RESOURCE_DIR}")
+    log(f"[PATH] APP_DIR={APP_DIR}")
+    log(f"[PATH] templates={RESOURCE_DIR / 'templates'}")
+    log(f"[PATH] static={RESOURCE_DIR / 'static'}")
+    log(f"[PATH] exports={EXPORT_DIR}")
 
 debug_paths()
-
-EXPORT_DIR = Path(os.environ["LOCALAPPDATA"]) / "BrewInsPOS" / "exports"
-EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------
 # RUN MIGRATIONS SAFELY
@@ -68,7 +101,7 @@ try:
     ops.initialize_database()
 except Exception as e:
     log(f"Database initialization failed: {e}")
-    
+
 try:
     ops._migrate_receipt_seq()
     ops._migrate_shifts_table()
@@ -97,7 +130,12 @@ except Exception as e:
 # ---------------------------------------------------------------------
 # Flask Setup
 # ---------------------------------------------------------------------
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder=str(RESOURCE_DIR / "templates"),
+    static_folder=str(RESOURCE_DIR / "static")
+)
+
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.secret_key = "brewins-pos-local-secret-key"
 
@@ -120,7 +158,6 @@ def index():
 def pos_page():
     app_log("GET /pos")
     return render_template('pos.html')
-
 
 # ---------- ADMIN PAGES ----------
 @app.route('/admin/inventory')

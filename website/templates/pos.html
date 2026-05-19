@@ -58,7 +58,10 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="m-0">POS Register</h2>
-  <button id="closeShiftBtn" class="btn btn-danger" onclick="openCloseShiftModal()">Close Shift</button>
+  <div class="d-flex gap-2">
+    <button id="exitAdminBtn" class="btn btn-secondary d-none" onclick="exitAdminMode()">Exit Admin Mode</button>
+    <button id="closeShiftBtn" class="btn btn-danger" onclick="openCloseShiftModal()">Close Shift</button>
+  </div>
 </div>
 <div class="pos-register-layout">
   <aside class="pos-category-sidebar">
@@ -356,13 +359,26 @@
     document.getElementById("openingTillTotal").textContent = calculateTillTotal("opening").toFixed(2);
   }
 
-  function enterAdminMode() {
+  async function enterAdminMode() {
+    await fetch('/api/security/lock_admin', { method: 'POST' });
+
     adminMode = true;
     activeCashier = "Admin Mode";
     sessionStorage.setItem("brewins_admin_mode", "1");
     shiftModal.hide();
     clearCartForModeChange();
     checkShiftLock();
+  }
+
+  async function exitAdminMode() {
+    await fetch('/api/security/lock_admin', { method: 'POST' });
+
+    adminMode = false;
+    sessionStorage.removeItem("brewins_admin_mode");
+
+    clearCartForModeChange();
+    checkShiftLock();
+    shiftModal.show();
   }
 
   async function startShift() {
@@ -423,6 +439,16 @@
 
     if (adminMode && !hasShift) {
       document.getElementById('total').textContent = '0.00';
+    }
+
+    const exitBtn = document.getElementById('exitAdminBtn');
+
+    if (exitBtn) {
+      if (adminMode && !hasShift) {
+        exitBtn.classList.remove('d-none');
+      } else {
+        exitBtn.classList.add('d-none');
+      }
     }
   }
 
@@ -1450,12 +1476,9 @@ function getFinalTotal() {
         item_sku: c.sku || c.base_name || c.name,
         qty: c.qty,
         unit_price: Number(c.price || 0),
-        modifiers: (c.flavors || []).map(f => ({
-          type: "flavor",
-          name: f.name,
-          qty: Number(f.pumps || 0),
-          unit_price: Number(f.price_per_pump || 0.25)
-        }))
+        modifiers: {
+          flavors: c.flavors || []
+        }
       })),
       discount:discount,
       discount_type: discount_type || null,

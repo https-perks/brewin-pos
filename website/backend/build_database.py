@@ -13,18 +13,15 @@ import os
 # ------------------------------------------------------------
 def _base_dir():
     if getattr(sys, "frozen", False):
-        # Installed EXE: always store DB in LocalAppData\BrewInsPOS
         return Path(os.environ["LOCALAPPDATA"]) / "BrewInsPOS"
-    else:
-        # Running from source
-        return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[1]
 
 BASE_DIR = _base_dir()
 
-# Use same structure as shipping app
-DB_FILE  = BASE_DIR / "backend" / "pos.db"
-SQL_FILE = BASE_DIR / "backend" / "models.sql"
+DB_FILE = BASE_DIR / "backend" / "pos.db"
+DB_FILE.parent.mkdir(parents=True, exist_ok=True)
 
+SQL_FILE = BASE_DIR / "backend" / "models.sql"
 
 def connect():
     conn = sqlite3.connect(DB_FILE)
