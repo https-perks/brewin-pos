@@ -32,13 +32,18 @@ function loadSales(){
       let html = `<h5>Sales Report for ${data.date}</h5>`;
       html += `<table class="table table-sm table-striped mt-3">
         <thead><tr><th>Item</th><th class='text-end'>Qty Sold</th>
-        <th class='text-end'>Unit Price</th><th class='text-end'>Gross</th>
+        <th class='text-end'>Base Price</th>
+        <th class='text-end'>Flavor/Add-on</th>
+        <th class='text-end'>Final Unit</th>
+        <th class='text-end'>Gross</th>
         <th class='text-end'>COGS</th></tr></thead><tbody>`;
 
       data.items.forEach(it=>{
         html += `<tr>
           <td>${it.name}</td>
           <td class='text-end'>${it.qty_sold}</td>
+          <td class='text-end'>${fmtMoney(it.base_unit_price ?? it.unit_price)}</td>
+          <td class='text-end'>${fmtMoney(it.modifier_unit_price || 0)}</td>
           <td class='text-end'>${fmtMoney(it.unit_price)}</td>
           <td class='text-end'>${fmtMoney(it.gross)}</td>
           <td class='text-end'>${fmtMoney(it.cogs)}</td>
@@ -46,6 +51,33 @@ function loadSales(){
       });
 
       html += `</tbody></table>`;
+
+      if ((data.modifiers || []).length) {
+        html += `
+          <h6 class="mt-4">Flavor/Add-on Breakdown</h6>
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th class="text-end">Qty Sold</th>
+                <th class="text-end">Gross</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(data.modifiers || []).map(m => `
+                <tr>
+                  <td>${m.modifier_type || '-'}</td>
+                  <td>${m.name || '-'}</td>
+                  <td class="text-end">${m.qty_sold || 0}</td>
+                  <td class="text-end">${fmtMoney(m.gross)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+
       const hasTax = Number(data.tax_total || 0) > 0;
       const hasDiscounts = Number(data.discount_total || 0) > 0;
 
@@ -76,6 +108,8 @@ function loadSales(){
       }
 
       html += `<div class='text-end'>
+        <div>Base Item Sales: <strong>${fmtMoney(data.base_sales_total || 0)}</strong></div>
+        <div>Flavor/Add-on Sales: <strong>${fmtMoney(data.modifier_sales_total || 0)}</strong></div>
         <div>Pre-Discount Sales: <strong>${fmtMoney(data.pre_discount_sales ?? data.gross_total)}</strong></div>
         ${hasDiscounts ? `<div>Discounts: <strong>-${fmtMoney(data.discount_total)}</strong></div>` : ''}
         ${hasTax ? `<div>Tax: <strong>${fmtMoney(data.tax_total)}</strong></div>` : ''}
@@ -150,7 +184,9 @@ function loadSalesRange(){
         <thead><tr>
           <th>Item</th>
           <th class="text-end">Qty Sold</th>
-          <th class="text-end">Unit Price</th>
+          <th class="text-end">Base Price</th>
+          <th class="text-end">Flavor/Add-on</th>
+          <th class="text-end">Final Unit</th>
           <th class="text-end">Gross</th>
           <th class="text-end">COGS</th>
         </tr></thead><tbody>`;
@@ -159,6 +195,8 @@ function loadSalesRange(){
         html += `<tr>
           <td>${it.name}</td>
           <td class="text-end">${it.qty_sold}</td>
+          <td class="text-end">${fmtMoney(it.base_unit_price ?? it.unit_price)}</td>
+          <td class="text-end">${fmtMoney(it.modifier_unit_price || 0)}</td>
           <td class="text-end">${fmtMoney(it.unit_price)}</td>
           <td class="text-end">${fmtMoney(it.gross)}</td>
           <td class="text-end">${fmtMoney(it.cogs)}</td>
@@ -166,6 +204,33 @@ function loadSalesRange(){
       });
 
       html += `</tbody></table>`;
+
+      if ((data.modifiers || []).length) {
+        html += `
+          <h6 class="mt-4">Flavor/Add-on Breakdown</h6>
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th class="text-end">Qty Sold</th>
+                <th class="text-end">Gross</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(data.modifiers || []).map(m => `
+                <tr>
+                  <td>${m.modifier_type || '-'}</td>
+                  <td>${m.name || '-'}</td>
+                  <td class="text-end">${m.qty_sold || 0}</td>
+                  <td class="text-end">${fmtMoney(m.gross)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+
       const hasTax = Number(data.tax_total || 0) > 0;
       const hasDiscounts = Number(data.discount_total || 0) > 0;
 
@@ -196,6 +261,8 @@ function loadSalesRange(){
       }
 
       html += `<div class="text-end">
+        <div>Base Item Sales: <strong>${fmtMoney(data.base_sales_total || 0)}</strong></div>
+        <div>Flavor/Add-on Sales: <strong>${fmtMoney(data.modifier_sales_total || 0)}</strong></div>
         <div>Pre-Discount Sales: <strong>${fmtMoney(data.pre_discount_sales ?? data.gross_total)}</strong></div>
         ${hasDiscounts ? `<div>Discounts: <strong>-${fmtMoney(data.discount_total)}</strong></div>` : ''}
         ${hasTax ? `<div>Tax: <strong>${fmtMoney(data.tax_total)}</strong></div>` : ''}

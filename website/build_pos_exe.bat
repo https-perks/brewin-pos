@@ -48,7 +48,6 @@ pyinstaller ^
   --add-data "templates;templates" ^
   --add-data "static;static" ^
   --add-data "catalog_backup;catalog_backup" ^
-  --add-data "SchoolCafe_POS.xlsx;." ^
   --add-data "icon.ico;." ^
   app_window.py
 

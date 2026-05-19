@@ -79,8 +79,12 @@ try:
     ops._migrate_settings_tables()
     ops._migrate_sales_table()
     ops._migrate_order_discounts_table()
+    ops._migrate_order_line_modifiers_table()
     ops._migrate_component_display_name()
     ops._migrate_component_inventory_id()
+    ops._migrate_till_counts_table()
+    ops._migrate_item_pos_group_fields()
+    ops._migrate_flavors_table()
 except Exception as e:
     log(f"Schema migration check failed: {e}")
 
@@ -96,6 +100,11 @@ except Exception as e:
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.secret_key = "brewins-pos-local-secret-key"
+
+# ---------- DEBUGGING ENDPOINTS ----------
+@app.route('/api/debug/components')
+def api_debug_components():
+    return jsonify(ops.debug_bad_components())
 
 # ---------- ROUTES ----------
 @app.route('/splash')
@@ -130,6 +139,11 @@ def admin_components_page():
 def admin_recipes_page():
     return render_template('admin/recipes.html')
 
+
+@app.route('/admin/flavors')
+def admin_flavors_page():
+    return render_template('admin/flavors.html')
+
 # ---------- REPORTS PAGES ----------
 @app.route('/reports/receipts')
 def reports_receipts():
@@ -142,11 +156,17 @@ def reports_sales():
 # ---------- SHIFT API ----------
 @app.route('/api/shift/start', methods=['POST'])
 def api_shift_start():
-    data = request.json
+    data = request.json or {}
     cashier = data.get("cashier")
-    opening = float(data.get("opening_float") or 0)
-    ops.start_shift(cashier, opening)
-    return jsonify({'ok': True})
+    till_count = data.get("till_count")
+
+    if till_count is not None:
+        result = ops.start_shift(cashier, till_count=till_count)
+    else:
+        opening = float(data.get("opening_float") or 0)
+        result = ops.start_shift(cashier, opening_float=opening)
+
+    return jsonify(result)
 
 @app.route('/api/shift/active')
 def api_shift_active():
@@ -154,8 +174,14 @@ def api_shift_active():
 
 @app.route('/api/shift/close', methods=['POST'])
 def api_shift_close():
-    data = request.json
-    result = ops.close_shift(float(data.get("actual_cash", 0)))
+    data = request.json or {}
+    till_count = data.get("till_count")
+
+    if till_count is not None:
+        result = ops.close_shift(till_count=till_count)
+    else:
+        result = ops.close_shift(float(data.get("actual_cash", 0)))
+
     return jsonify(result)
 
 @app.route('/api/reports/cash_summary')
@@ -296,6 +322,30 @@ def api_items():
         it["available_qty"] = qty
         it["in_stock"] = qty > 0
     return jsonify(items)
+
+@app.route('/api/flavors')
+def api_flavors():
+    return jsonify(ops.list_flavors())
+
+@app.route('/api/admin/flavors')
+def api_admin_flavors():
+    return jsonify(ops.list_flavors(include_inactive=True))
+
+@app.route('/api/admin/flavors/add', methods=['POST'])
+def api_admin_flavors_add():
+    ops.add_flavor(request.json or {})
+    return jsonify({"ok": True})
+
+@app.route('/api/admin/flavors/update', methods=['POST'])
+def api_admin_flavors_update():
+    ops.update_flavor(request.json or {})
+    return jsonify({"ok": True})
+
+@app.route('/api/admin/flavors/delete', methods=['POST'])
+def api_admin_flavors_delete():
+    data = request.json or {}
+    ops.delete_flavor(int(data["id"]))
+    return jsonify({"ok": True})
 
 import traceback
 
@@ -522,11 +572,33 @@ def api_reports_receipt_pdf(order_id):
             c.showPage()
             y = height - 0.75*inch
             c.setFont("Helvetica", 10)
+
         c.drawString(1*inch, y, ln["item_name"])
         c.drawRightString(4.3*inch, y, f"{ln['qty']:.0f}")
-        c.drawRightString(5.2*inch, y, f"${ln['unit_price']:.2f}")
-        c.drawRightString(6.2*inch, y, f"${ln['line_total']:.2f}")
+        c.drawRightString(5.2*inch, y, f"${float(ln['unit_price']):.2f}")
+        c.drawRightString(6.2*inch, y, f"${float(ln['line_total']):.2f}")
         y -= 0.22*inch
+
+        modifiers = ln.get("modifiers", []) or []
+        if modifiers:
+            c.setFont("Helvetica-Oblique", 8)
+            for m in modifiers:
+                if y < 1*inch:
+                    c.showPage()
+                    y = height - 0.75*inch
+                    c.setFont("Helvetica-Oblique", 8)
+
+                name = m.get("name") or "Modifier"
+                qty = int(m.get("qty") or 0)
+                unit_price = float(m.get("unit_price") or 0)
+                line_total = float(m.get("line_total") or 0)
+
+                c.drawString(1.18*inch, y, f"+ {name} x{qty}")
+                c.drawRightString(5.2*inch, y, f"${unit_price:.2f}")
+                c.drawRightString(6.2*inch, y, f"${line_total:.2f}")
+                y -= 0.16*inch
+
+            c.setFont("Helvetica", 10)
 
     y -= 0.1*inch
     c.line(4.8*inch, y, 6.2*inch, y)

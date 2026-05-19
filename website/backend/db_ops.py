@@ -344,22 +344,328 @@ def _migrate_order_discounts_table():
         c.commit()
 
     log("Migration: order_discounts table verified.")
+
+
+def _migrate_order_line_modifiers_table():
+    """Store POS modifier details such as flavor pumps for receipt/report display."""
+    with connect() as c:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS order_line_modifiers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_line_id INTEGER NOT NULL,
+                modifier_type TEXT NOT NULL DEFAULT 'flavor',
+                name TEXT NOT NULL,
+                qty INTEGER NOT NULL DEFAULT 1,
+                unit_price REAL NOT NULL DEFAULT 0,
+                line_total REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', '-6 hours')),
+                FOREIGN KEY (order_line_id) REFERENCES order_lines(id) ON DELETE CASCADE
+            )
+        """)
+        c.commit()
+
+    log("Migration: order_line_modifiers table verified.")
+
+
+def _migrate_till_counts_table():
+    """Store opening and closing denomination counts for each shift."""
+    with connect() as c:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS till_counts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shift_id INTEGER NOT NULL,
+                count_type TEXT NOT NULL,
+                hundreds INTEGER NOT NULL DEFAULT 0,
+                fifties INTEGER NOT NULL DEFAULT 0,
+                twenties INTEGER NOT NULL DEFAULT 0,
+                tens INTEGER NOT NULL DEFAULT 0,
+                fives INTEGER NOT NULL DEFAULT 0,
+                ones INTEGER NOT NULL DEFAULT 0,
+                quarters INTEGER NOT NULL DEFAULT 0,
+                dimes INTEGER NOT NULL DEFAULT 0,
+                nickels INTEGER NOT NULL DEFAULT 0,
+                pennies INTEGER NOT NULL DEFAULT 0,
+                total REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', '-6 hours')),
+                FOREIGN KEY (shift_id) REFERENCES shifts(id)
+            )
+        """)
+        c.commit()
+
+    log("Migration: till_counts table verified.")
+
+
+def _migrate_item_pos_group_fields():
+    """
+    Add POS grouping fields so multiple item SKUs can appear as one drink/item
+    button with size choices.
+
+    category = broad POS category such as Drinks, Food, Specials.
+    display_group = customer-facing grouped button name, e.g. Coffee.
+    size_label = option label inside modal, e.g. 8oz or 12oz.
+    allow_flavors = future toggle for modifier/flavor UI.
+    pos_sort_order = optional manual sorting.
+    """
+    with connect() as c:
+        cols = [r["name"] for r in c.execute("PRAGMA table_info(items)").fetchall()]
+
+        if "display_group" not in cols:
+            c.execute("ALTER TABLE items ADD COLUMN display_group TEXT")
+
+        if "size_label" not in cols:
+            c.execute("ALTER TABLE items ADD COLUMN size_label TEXT")
+
+        if "allow_flavors" not in cols:
+            c.execute("ALTER TABLE items ADD COLUMN allow_flavors INTEGER NOT NULL DEFAULT 0")
+
+        if "pos_sort_order" not in cols:
+            c.execute("ALTER TABLE items ADD COLUMN pos_sort_order INTEGER NOT NULL DEFAULT 0")
+
+        # Sensible backfill for existing items:
+        # "Coffee 8oz" -> display_group "Coffee", size_label "8oz"
+        # "Coffee 12oz" -> display_group "Coffee", size_label "12oz"
+        # Anything else keeps its full name as the display_group.
+        rows = c.execute("""
+            SELECT id, name, display_group, size_label
+            FROM items
+            WHERE active = 1
+        """).fetchall()
+
+        for r in rows:
+            name = (r["name"] or "").strip()
+            display_group = (r["display_group"] or "").strip()
+            size_label = (r["size_label"] or "").strip()
+
+            if not display_group or not size_label:
+                parts = name.split()
+                guessed_size = ""
+                guessed_group = name
+
+                if parts:
+                    last = parts[-1].lower()
+                    if last.endswith("oz") or last in {"small", "medium", "large"}:
+                        guessed_size = parts[-1]
+                        guessed_group = " ".join(parts[:-1]).strip() or name
+
+                c.execute("""
+                    UPDATE items
+                    SET display_group = COALESCE(NULLIF(display_group, ''), ?),
+                        size_label = COALESCE(NULLIF(size_label, ''), ?)
+                    WHERE id = ?
+                """, (
+                    guessed_group,
+                    guessed_size,
+                    r["id"]
+                ))
+
+        c.commit()
+
+    log("Migration: item POS grouping fields verified.")
+
+
+def _migrate_flavors_table():
+    """Create/manage POS flavor pump options. These are POS modifiers, not recipe-tracked inventory."""
+    with connect() as c:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS flavors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                price_per_pump REAL NOT NULL DEFAULT 0.25,
+                active INTEGER NOT NULL DEFAULT 1,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+
+        # Seed a practical starter list only when the table is empty.
+        existing = c.execute("SELECT COUNT(*) AS n FROM flavors").fetchone()["n"]
+        if int(existing or 0) == 0:
+            starter_flavors = [
+                ("Vanilla", 0.25, 1, 10),
+                ("Caramel", 0.25, 1, 20),
+                ("Hazelnut", 0.25, 1, 30),
+                ("Mocha", 0.25, 1, 40),
+                ("Peppermint", 0.25, 1, 50),
+                ("Sugar Free Vanilla", 0.25, 1, 60),
+            ]
+            c.executemany("""
+                INSERT OR IGNORE INTO flavors(name, price_per_pump, active, sort_order)
+                VALUES (?, ?, ?, ?)
+            """, starter_flavors)
+
+        c.commit()
+
+    log("Migration: flavors table verified.")
+
+
+def list_flavors(include_inactive: bool = False) -> list[dict]:
+    """Return POS flavor pump options."""
+    with connect() as c:
+        where = "" if include_inactive else "WHERE active = 1"
+        rows = c.execute(f"""
+            SELECT id, name, price_per_pump, active, sort_order
+            FROM flavors
+            {where}
+            ORDER BY sort_order, name
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+
+def add_flavor(data: dict):
+    """Create or update a flavor by name."""
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise ValueError("Flavor name is required.")
+
+    price_per_pump = float(data.get("price_per_pump", 0.25) or 0.25)
+    active = int(data.get("active", 1) or 0)
+    sort_order = int(data.get("sort_order", 0) or 0)
+
+    with connect() as c:
+        c.execute("""
+            INSERT INTO flavors(name, price_per_pump, active, sort_order)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+                price_per_pump=excluded.price_per_pump,
+                active=excluded.active,
+                sort_order=excluded.sort_order
+        """, (name, price_per_pump, active, sort_order))
+        c.commit()
+
+
+def update_flavor(data: dict):
+    """Update an existing flavor."""
+    with connect() as c:
+        c.execute("""
+            UPDATE flavors
+            SET name=?, price_per_pump=?, active=?, sort_order=?
+            WHERE id=?
+        """, (
+            (data.get("name") or "").strip(),
+            float(data.get("price_per_pump", 0.25) or 0.25),
+            int(data.get("active", 1) or 0),
+            int(data.get("sort_order", 0) or 0),
+            int(data.get("id"))
+        ))
+        c.commit()
+
+
+def delete_flavor(flavor_id: int):
+    """Delete a flavor option."""
+    with connect() as c:
+        c.execute("DELETE FROM flavors WHERE id=?", (int(flavor_id),))
+        c.commit()
+
+
+_TILL_VALUES = {
+    "hundreds": 100.00,
+    "fifties": 50.00,
+    "twenties": 20.00,
+    "tens": 10.00,
+    "fives": 5.00,
+    "ones": 1.00,
+    "quarters": 0.25,
+    "dimes": 0.10,
+    "nickels": 0.05,
+    "pennies": 0.01,
+}
+
+
+def _normalize_till_count(till_count: dict | None) -> dict:
+    till_count = till_count or {}
+    normalized = {}
+
+    for key in _TILL_VALUES:
+        try:
+            normalized[key] = max(0, int(till_count.get(key, 0) or 0))
+        except Exception:
+            normalized[key] = 0
+
+    return normalized
+
+
+def calculate_till_total(till_count: dict | None) -> float:
+    counts = _normalize_till_count(till_count)
+    total = sum(counts[key] * value for key, value in _TILL_VALUES.items())
+    return round(total, 2)
+
+
+def _save_till_count(conn, shift_id: int, count_type: str, till_count: dict | None) -> float:
+    counts = _normalize_till_count(till_count)
+    total = calculate_till_total(counts)
+
+    conn.execute("""
+        INSERT INTO till_counts (
+            shift_id,
+            count_type,
+            hundreds,
+            fifties,
+            twenties,
+            tens,
+            fives,
+            ones,
+            quarters,
+            dimes,
+            nickels,
+            pennies,
+            total
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        shift_id,
+        count_type,
+        counts["hundreds"],
+        counts["fifties"],
+        counts["twenties"],
+        counts["tens"],
+        counts["fives"],
+        counts["ones"],
+        counts["quarters"],
+        counts["dimes"],
+        counts["nickels"],
+        counts["pennies"],
+        total
+    ))
+
+    return total
+
     
 # ---------------------------------------------------------------------`
 # Shifts (daily cashier sessions)
 # ---------------------------------------------------------------------`
-def start_shift(cashier:str, opening_float:float):
+def start_shift(cashier: str, opening_float: float = 0, till_count: dict | None = None):
+    """
+    Start a shift.
+
+    If till_count is provided, opening_float is calculated from the denomination
+    count and a till_counts row is saved.
+    """
     with connect() as c:
         active = c.execute("SELECT id FROM shifts WHERE is_active=1").fetchone()
         if active:
             raise ValueError("Shift already active.")
-        c.execute("""
+
+        opening_total = calculate_till_total(till_count) if till_count is not None else round(float(opening_float or 0), 2)
+
+        cur = c.execute("""
             INSERT INTO shifts(ts_start, cashier, opening_float, is_active)
             VALUES(datetime('now', '-6 hours'), ?, ?, 1)
-        """, (cashier, opening_float))
+        """, (cashier, opening_total))
+
+        shift_id = cur.lastrowid
+
+        if till_count is not None:
+            _save_till_count(c, shift_id, "opening", till_count)
+
         c.commit()
+
     log(f"Shift started for {cashier}")
-    return True
+    return {
+        "ok": True,
+        "shift_id": shift_id,
+        "cashier": cashier,
+        "opening_float": opening_total
+    }
+
 
 
 def get_active_shift():
@@ -402,10 +708,13 @@ def get_cash_summary(ts_start: str | None = None) -> dict:
 # ---------------------------------------------------------------------
 # Close shift
 # ---------------------------------------------------------------------
-def close_shift(actual_cash: float):
+def close_shift(actual_cash: float | None = None, till_count: dict | None = None):
     """
     Close the current active shift.
     Calculates expected cash, computes over/short, and finalizes the record.
+
+    If till_count is provided, actual_cash is calculated from the denomination count
+    and a till_counts row is saved.
     """
     with connect() as c:
         shift = c.execute("SELECT * FROM shifts WHERE is_active=1").fetchone()
@@ -415,6 +724,11 @@ def close_shift(actual_cash: float):
         shift_id = shift["id"]
         ts_start = shift["ts_start"]
         opening = float(shift["opening_float"] or 0)
+
+        if till_count is not None:
+            actual_cash = _save_till_count(c, shift_id, "closing", till_count)
+        else:
+            actual_cash = float(actual_cash or 0)
 
         # --- Calculate net cash movement since shift start ---
         row = c.execute("""
@@ -519,6 +833,10 @@ def list_items():
                 i.category,
                 i.price,
                 i.active,
+                COALESCE(NULLIF(i.display_group, ''), i.name) AS display_group,
+                COALESCE(i.size_label, '') AS size_label,
+                COALESCE(i.allow_flavors, 0) AS allow_flavors,
+                COALESCE(i.pos_sort_order, 0) AS pos_sort_order,
 
                 ROUND(
                     COALESCE(SUM(
@@ -544,9 +862,13 @@ def list_items():
                 i.name,
                 i.category,
                 i.price,
-                i.active
+                i.active,
+                i.display_group,
+                i.size_label,
+                i.allow_flavors,
+                i.pos_sort_order
 
-            ORDER BY i.category, i.name
+            ORDER BY i.category, pos_sort_order, display_group, size_label, i.name
         """).fetchall()
 
         items = []
@@ -572,18 +894,11 @@ def get_item_by_sku(conn, sku:str):
     row = conn.execute("SELECT id, price FROM items WHERE sku=? OR name=?", (sku, sku)).fetchone()
     return dict(row) if row else None
 
-def add_item(data):
-    with connect() as c:
-        c.execute("""
-            INSERT INTO items (sku, name, category, price, active)
-            VALUES (?, ?, ?, ?, 1)
-        """, (data['sku'], data['name'], data['category'], data['price']))
-        c.commit()
-
 def add_component(data):
     """Add or update a component linked to inventory by inventory_id."""
     inventory_id = int(data.get("inventory_id") or 0)
     display_name = (data.get("display_name") or "").strip() or None
+    pos_track_sellout = int(data.get("pos_track_sellout", 0))
 
     if inventory_id <= 0:
         raise ValueError("inventory_id is required.")
@@ -601,24 +916,41 @@ def add_component(data):
 
         inventory_name = inv["name"]
 
-        c.execute("""
-            INSERT INTO components (
-                name,
+        existing = c.execute("""
+            SELECT id
+            FROM components
+            WHERE inventory_id = ?
+            LIMIT 1
+        """, (inventory_id,)).fetchone()
+
+        if existing:
+            c.execute("""
+                UPDATE components
+                SET name = ?,
+                    display_name = COALESCE(?, display_name),
+                    pos_track_sellout = ?
+                WHERE id = ?
+            """, (
+                inventory_name,
+                display_name,
+                pos_track_sellout,
+                existing["id"]
+            ))
+        else:
+            c.execute("""
+                INSERT INTO components (
+                    name,
+                    display_name,
+                    inventory_id,
+                    pos_track_sellout
+                )
+                VALUES (?, ?, ?, ?)
+            """, (
+                inventory_name,
                 display_name,
                 inventory_id,
                 pos_track_sellout
-            )
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                display_name = COALESCE(excluded.display_name, components.display_name),
-                inventory_id = excluded.inventory_id,
-                pos_track_sellout = excluded.pos_track_sellout
-        """, (
-            inventory_name,
-            display_name,
-            inventory_id,
-            int(data.get("pos_track_sellout", 0))
-        ))
+            ))
 
         c.commit()
 
@@ -632,7 +964,7 @@ def available_qty(item_id: int) -> int:
             SELECT inv.qty_on_hand AS onhand, r.qty_per_item AS per
             FROM recipes r
             JOIN components comp ON comp.id = r.component_id
-            JOIN inventory inv ON inv.name = comp.name
+            JOIN inventory inv ON inv.id = comp.inventory_id
             WHERE r.item_id=? AND comp.pos_track_sellout=1
         """, (item_id,)).fetchall()
 
@@ -680,10 +1012,86 @@ def record_order(cashier:str, method:str, discount:float, lines:list, discount_t
             it = get_item_by_sku(c, sku)
             if not it:
                 raise ValueError(f"Unknown item: {sku}")
+
+            base_price = float(it["price"])
+
+            # POS modifiers such as flavor pumps may send a configured unit_price.
+            # We accept higher configured prices, but never allow a client-side override
+            # to reduce the item below its base price. Discounts should use discount logic.
+            requested_unit_price = l.get("unit_price")
+            if requested_unit_price is None:
+                unit_price = base_price
+            else:
+                unit_price = max(base_price, round(float(requested_unit_price or base_price), 2))
+
+            modifiers = []
+
+            raw_modifiers = l.get("modifiers", []) or []
+
+            # Current POS shape may be:
+            #   modifiers: { flavors: [{name, pumps, price_per_pump}, ...] }
+            # Older/intermediate shapes may be:
+            #   modifiers: [{name, qty, unit_price}, ...]
+            #   modifiers: ["Vanilla", "Caramel"]
+            # Normalize all of them into one flat list of modifier dicts.
+            if isinstance(raw_modifiers, dict):
+                flattened = []
+
+                for f in raw_modifiers.get("flavors", []) or []:
+                    if isinstance(f, dict):
+                        f = dict(f)
+                        f.setdefault("type", "flavor")
+                        flattened.append(f)
+                    elif isinstance(f, str):
+                        flattened.append({"type": "flavor", "name": f, "qty": 1, "unit_price": 0.25})
+
+                # Keep support for any future modifier groups too.
+                for key, value in raw_modifiers.items():
+                    if key == "flavors":
+                        continue
+                    if isinstance(value, list):
+                        for m in value:
+                            if isinstance(m, dict):
+                                m = dict(m)
+                                m.setdefault("type", key.rstrip("s") or "modifier")
+                                flattened.append(m)
+                            elif isinstance(m, str):
+                                flattened.append({"type": key.rstrip("s") or "modifier", "name": m, "qty": 1, "unit_price": 0})
+
+                raw_modifiers = flattened
+
+            for m in raw_modifiers:
+                if isinstance(m, str):
+                    name = m.strip()
+                    qty = 1
+                    mod_unit_price = 0.25
+                    mod_type = "flavor"
+                elif isinstance(m, dict):
+                    name = (m.get("name") or m.get("label") or "").strip()
+                    qty = int(m.get("qty", m.get("pumps", m.get("count", 0))) or 0)
+                    mod_unit_price = round(float(
+                        m.get("unit_price", m.get("price_per_pump", m.get("price", 0.25 if (m.get("type") or "flavor") == "flavor" else 0))) or 0
+                    ), 2)
+                    mod_type = (m.get("type") or m.get("modifier_type") or "flavor").strip() or "flavor"
+                else:
+                    continue
+
+                if not name or qty <= 0:
+                    continue
+
+                modifiers.append({
+                    "type": mod_type,
+                    "name": name,
+                    "qty": qty,
+                    "unit_price": mod_unit_price,
+                    "line_total": round(qty * mod_unit_price, 2)
+                })
+
             cart.append({
                 "item_id": it["id"],
                 "qty": float(l["qty"]),
-                "unit_price": float(it["price"])
+                "unit_price": unit_price,
+                "modifiers": modifiers
             })
 
         subtotal = sum(x["qty"] * x["unit_price"] for x in cart)
@@ -754,10 +1162,32 @@ def record_order(cashier:str, method:str, discount:float, lines:list, discount_t
 
         # --- Order lines ---
         for x in cart:
-            c.execute("""
+            cur_line = c.execute("""
                 INSERT INTO order_lines(order_id, item_id, qty, unit_price)
                 VALUES (?, ?, ?, ?)
             """, (order_id, x["item_id"], x["qty"], x["unit_price"]))
+
+            order_line_id = cur_line.lastrowid
+
+            for m in x.get("modifiers", []) or []:
+                c.execute("""
+                    INSERT INTO order_line_modifiers (
+                        order_line_id,
+                        modifier_type,
+                        name,
+                        qty,
+                        unit_price,
+                        line_total
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    order_line_id,
+                    m.get("type", "flavor"),
+                    m.get("name", ""),
+                    int(m.get("qty", 0) or 0),
+                    float(m.get("unit_price", 0) or 0),
+                    float(m.get("line_total", 0) or 0)
+                ))
 
         # --- Update inventory for each component ---
         rows = c.execute("""
@@ -769,7 +1199,7 @@ def record_order(cashier:str, method:str, discount:float, lines:list, discount_t
             FROM order_lines ol
             JOIN recipes r ON r.item_id = ol.item_id
             JOIN components c2 ON c2.id = r.component_id
-            JOIN inventory inv ON inv.name = c2.name
+            JOIN inventory inv ON inv.id = c2.inventory_id
             WHERE ol.order_id = ?
             GROUP BY ol.item_id, inv.id, r.qty_per_item
         """, (order_id,)).fetchall()
@@ -804,7 +1234,7 @@ def record_order(cashier:str, method:str, discount:float, lines:list, discount_t
                 SELECT inv.id
                 FROM recipes r
                 JOIN components c3 ON c3.id = r.component_id
-                JOIN inventory inv ON inv.name = c3.name
+                JOIN inventory inv ON inv.id = c3.inventory_id
                 WHERE r.item_id=? AND c3.pos_track_sellout=1
                 ORDER BY c3.id LIMIT 1
             """, (lf["item_id"],)).fetchone()
@@ -1088,30 +1518,82 @@ def add_item(data):
         if not sku:
             sku = name.replace(" ", "_").replace("(", "").replace(")", "").upper()[:12]
 
+        display_group = (data.get("display_group") or "").strip() or name
+        size_label = (data.get("size_label") or "").strip()
+        allow_flavors = int(data.get("allow_flavors", 0) or 0)
+        pos_sort_order = int(data.get("pos_sort_order", 0) or 0)
+
         c.execute("""
-            INSERT INTO items (sku, name, category, price, active)
-            VALUES (?, ?, ?, ?, 1)
+            INSERT INTO items (
+                sku,
+                name,
+                category,
+                price,
+                active,
+                display_group,
+                size_label,
+                allow_flavors,
+                pos_sort_order
+            )
+            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
             ON CONFLICT(sku) DO UPDATE SET
               name=excluded.name,
               category=excluded.category,
               price=excluded.price,
-              active=1
-        """, (sku, name, cat, price))
+              active=1,
+              display_group=excluded.display_group,
+              size_label=excluded.size_label,
+              allow_flavors=excluded.allow_flavors,
+              pos_sort_order=excluded.pos_sort_order
+        """, (
+            sku,
+            name,
+            cat,
+            price,
+            display_group,
+            size_label,
+            allow_flavors,
+            pos_sort_order
+        ))
         c.commit()
         
 def update_item(data):
     """Edit an existing item (name, category, price)."""
     with connect() as c:
-        c.execute("""
-            UPDATE items
-            SET name=?, category=?, price=?
-            WHERE id=?
-        """, (
-            data.get("name", "").strip(),
-            data.get("category", "").strip(),
-            float(data.get("price", 0)),
-            int(data.get("id"))
-        ))
+        cols = [r["name"] for r in c.execute("PRAGMA table_info(items)").fetchall()]
+
+        if "display_group" in cols:
+            c.execute("""
+                UPDATE items
+                SET name=?,
+                    category=?,
+                    price=?,
+                    display_group=?,
+                    size_label=?,
+                    allow_flavors=?,
+                    pos_sort_order=?
+                WHERE id=?
+            """, (
+                data.get("name", "").strip(),
+                data.get("category", "").strip(),
+                float(data.get("price", 0)),
+                (data.get("display_group") or "").strip() or data.get("name", "").strip(),
+                (data.get("size_label") or "").strip(),
+                int(data.get("allow_flavors", 0) or 0),
+                int(data.get("pos_sort_order", 0) or 0),
+                int(data.get("id"))
+            ))
+        else:
+            c.execute("""
+                UPDATE items
+                SET name=?, category=?, price=?
+                WHERE id=?
+            """, (
+                data.get("name", "").strip(),
+                data.get("category", "").strip(),
+                float(data.get("price", 0)),
+                int(data.get("id"))
+            ))
         c.commit()
 
 def delete_item(item_id:int):
@@ -1193,25 +1675,6 @@ def list_components():
 
         return comps
 
-def add_component(data):
-    """Add or update a component linked to inventory by name."""
-    name = (data.get("name") or "").strip()
-    display_name = (data.get("display_name") or "").strip() or None
-
-    with connect() as c:
-        c.execute("""
-            INSERT INTO components (name, display_name, pos_track_sellout)
-            VALUES (?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-              display_name=COALESCE(excluded.display_name, components.display_name),
-              pos_track_sellout=excluded.pos_track_sellout
-        """, (
-            name,
-            display_name,
-            int(data.get("pos_track_sellout", 0))
-        ))
-        c.commit()
-
 def update_component(data):
     """Update one component's nickname and sold-out tracking."""
     with connect() as c:
@@ -1267,36 +1730,108 @@ def _migrate_component_display_name():
 
     log("Migration: component display_name verified.")
     
+def delete_unlinked_blank_components():
+    with connect() as c:
+        c.execute("""
+            DELETE FROM components
+            WHERE inventory_id IS NULL
+              AND (name IS NULL OR TRIM(name) = '')
+              AND id NOT IN (
+                  SELECT DISTINCT component_id
+                  FROM recipes
+              )
+        """)
+        c.commit()
+    
+def debug_bad_components():
+    with connect() as c:
+        rows = c.execute("""
+            SELECT
+                comp.id,
+                comp.name,
+                comp.display_name,
+                comp.inventory_id,
+                inv.name AS inventory_name,
+                inv.case_cost,
+                inv.units_per_case,
+                CASE
+                    WHEN inv.units_per_case > 0
+                    THEN inv.case_cost / inv.units_per_case
+                    ELSE 0
+                END AS unit_cost
+            FROM components comp
+            LEFT JOIN inventory inv ON inv.id = comp.inventory_id
+            ORDER BY comp.id
+        """).fetchall()
+
+        return [dict(r) for r in rows]
+
 # ---------------------------------------------------------------------
 # RECIPES
 # ---------------------------------------------------------------------
 def add_recipe(data):
-    """Link an item to a component using stable component_id."""
+    """
+    Link an item to a component using stable IDs.
+
+    Preferred:
+      - item_id or item_key for the POS item
+      - component_id for the component
+
+    Legacy fallback:
+      - component_name still works, but only as a backup.
+    """
     with connect() as c:
-        item = c.execute(
-            "SELECT id FROM items WHERE sku=? OR name=? LIMIT 1",
-            (data.get("item_key"), data.get("item_key"))
-        ).fetchone()
+        if data.get("item_id"):
+            item = c.execute("""
+                SELECT id
+                FROM items
+                WHERE id = ?
+                LIMIT 1
+            """, (int(data.get("item_id")),)).fetchone()
+        else:
+            item_key = data.get("item_key")
+            item = c.execute("""
+                SELECT id
+                FROM items
+                WHERE sku = ? OR name = ?
+                LIMIT 1
+            """, (item_key, item_key)).fetchone()
 
         if data.get("component_id"):
-            comp = c.execute(
-                "SELECT id FROM components WHERE id=? LIMIT 1",
-                (int(data.get("component_id")),)
-            ).fetchone()
+            comp = c.execute("""
+                SELECT id
+                FROM components
+                WHERE id = ?
+                LIMIT 1
+            """, (int(data.get("component_id")),)).fetchone()
         else:
-            # fallback for older frontend
-            comp = c.execute(
-                "SELECT id FROM components WHERE name=? LIMIT 1",
-                (data.get("component_name"),)
-            ).fetchone()
+            component_name = (data.get("component_name") or "").strip()
 
-        if not item or not comp:
-            raise ValueError("Unknown item or component")
+            comp = c.execute("""
+                SELECT comp.id
+                FROM components comp
+                LEFT JOIN inventory inv ON inv.id = comp.inventory_id
+                WHERE inv.name = ?
+                   OR comp.name = ?
+                   OR comp.display_name = ?
+                LIMIT 1
+            """, (component_name, component_name, component_name)).fetchone()
+
+        if not item:
+            raise ValueError("Unknown item.")
+
+        if not comp:
+            raise ValueError("Unknown component.")
+
+        qty = float(data.get("qty_per_item", 1) or 1)
+
+        if qty <= 0:
+            raise ValueError("qty_per_item must be greater than 0.")
 
         c.execute("""
             INSERT INTO recipes (item_id, component_id, qty_per_item)
             VALUES (?, ?, ?)
-        """, (item["id"], comp["id"], float(data.get("qty_per_item", 1))))
+        """, (item["id"], comp["id"], qty))
 
         c.commit()
 
@@ -1322,8 +1857,14 @@ def list_recipes():
             SELECT 
                 r.id,
                 i.name AS item_name,
-                COALESCE(NULLIF(c.display_name, ''), c.name) AS component_name,
-                c.name AS component_inventory_name,
+
+                COALESCE(
+                    NULLIF(c.display_name, ''),
+                    inv.name,
+                    c.name
+                ) AS component_name,
+
+                COALESCE(inv.name, c.name) AS component_inventory_name,
                 c.display_name AS component_display_name,
                 r.qty_per_item,
 
@@ -1349,11 +1890,11 @@ def list_recipes():
             JOIN components c ON c.id = r.component_id
             LEFT JOIN inventory inv ON inv.id = c.inventory_id
 
-            ORDER BY i.name, c.name
+            ORDER BY i.name, COALESCE(NULLIF(c.display_name, ''), inv.name, c.name)
         """).fetchall()
 
         return [dict(r) for r in rows]
-
+    
 # ---------------------------------------------------------------------
 # INVENTORY (Warehouse Stock)
 # ---------------------------------------------------------------------
@@ -1526,6 +2067,7 @@ CATALOG_TABLES = [
     "sales",
     "sale_requirements",
     "settings",
+    "flavors",
 ]
 
 FULL_BACKUP_TABLES = [
@@ -1536,6 +2078,7 @@ FULL_BACKUP_TABLES = [
     "sales",
     "sale_requirements",
     "settings",
+    "flavors",
     "admin_pins",
     "orders",
     "order_lines",
@@ -1756,8 +2299,8 @@ def sales_summary():
         """).fetchall()
         return [dict(r) for r in rows]
 
-def kpis(start_date:str, end_date:str):
-    """Detailed KPI block (gross, tax, cogs, net)."""
+def kpis(start_date: str, end_date: str):
+    """Detailed KPI block: gross sales, tax, COGS, and gross profit."""
     with connect() as c:
         orders = c.execute("""
             SELECT id, subtotal, discount, tax
@@ -1765,23 +2308,51 @@ def kpis(start_date:str, end_date:str):
             WHERE DATE(ts) BETWEEN ? AND ?
         """, (start_date, end_date)).fetchall()
 
-        gross = sum(o["subtotal"] - float(o["discount"] or 0) for o in orders)
-        tax   = sum(o["tax"] for o in orders)
-        cogs  = 0.0
+        gross = 0.0
+        tax = 0.0
+        cogs = 0.0
+
         for o in orders:
-            lines = c.execute("SELECT id, item_id, qty FROM order_lines WHERE order_id=?", (o["id"],)).fetchall()
+            gross += float(o["subtotal"] or 0) - float(o["discount"] or 0)
+            tax += float(o["tax"] or 0)
+
+            lines = c.execute("""
+                SELECT item_id, qty
+                FROM order_lines
+                WHERE order_id = ?
+            """, (o["id"],)).fetchall()
+
             for ln in lines:
+                qty_sold = float(ln["qty"] or 0)
+
                 recs = c.execute("""
-                    SELECT r.qty_per_item, c.unit_cost
+                    SELECT
+                        r.qty_per_item,
+                        CASE
+                            WHEN inv.units_per_case > 0
+                            THEN inv.case_cost / inv.units_per_case
+                            ELSE 0
+                        END AS unit_cost
                     FROM recipes r
-                    JOIN components c ON c.id=r.component_id
-                    WHERE r.item_id=?
+                    JOIN components comp ON comp.id = r.component_id
+                    LEFT JOIN inventory inv ON inv.id = comp.inventory_id
+                    WHERE r.item_id = ?
                 """, (ln["item_id"],)).fetchall()
+
                 for rr in recs:
-                    cogs += float(ln["qty"]) * float(rr["qty_per_item"]) * float(rr["unit_cost"])
+                    qty_per_item = float(rr["qty_per_item"] or 0)
+                    unit_cost = float(rr["unit_cost"] or 0)
+
+                    cogs += qty_sold * qty_per_item * unit_cost
 
         gp = gross - cogs
-        return dict(gross=round(gross,2), tax=round(tax,2), cogs=round(cogs,2), gp=round(gp,2))
+
+        return {
+            "gross": round(gross, 2),
+            "tax": round(tax, 2),
+            "cogs": round(cogs, 2),
+            "gp": round(gp, 2)
+        }
     
 # --- REPORTS: Orders + Receipts ---
 
@@ -1821,6 +2392,25 @@ def get_receipt(order_id: int):
             WHERE ol.order_id = ?
             ORDER BY ol.id ASC
         """, (order_id,)).fetchall()    
+        line_dicts = []
+
+        for ln in lines:
+            line = dict(ln)
+            modifier_rows = c.execute("""
+                SELECT id,
+                       modifier_type,
+                       name,
+                       qty,
+                       unit_price,
+                       line_total
+                FROM order_line_modifiers
+                WHERE order_line_id = ?
+                ORDER BY id ASC
+            """, (line["id"],)).fetchall()
+
+            line["modifiers"] = [dict(m) for m in modifier_rows]
+            line_dicts.append(line)
+
         discounts = c.execute("""
             SELECT id,
                 sale_id,
@@ -1837,7 +2427,7 @@ def get_receipt(order_id: int):
         """, (order_id,)).fetchall()
         return {
             "order": dict(order),
-            "lines": [dict(r) for r in lines],
+            "lines": line_dicts,
             "discounts": [dict(r) for r in discounts]
         }
         
@@ -1862,30 +2452,32 @@ def delete_order_and_restore(order_id: int) -> bool:
     then deletes the order (order_lines are ON DELETE CASCADE).
     """
     with connect() as c:
-        # 1) Gather usage by inventory.name for this order
+        # 1) Gather usage by inventory_id for this order
         rows = c.execute("""
-            SELECT inv.name AS inv_name,
+            SELECT inv.id AS inv_id,
+                   inv.name AS inv_name,
                    SUM(ol.qty * r.qty_per_item) AS used_qty
             FROM order_lines ol
             JOIN recipes r       ON r.item_id = ol.item_id
             JOIN components comp ON comp.id   = r.component_id
-            JOIN inventory inv   ON inv.name  = comp.name
+            JOIN inventory inv   ON inv.id    = comp.inventory_id
             WHERE ol.order_id = ?
-            GROUP BY inv.name
+            GROUP BY inv.id, inv.name
         """, (order_id,)).fetchall()
 
-        # 2) Restore inventory (add back used qty)
+        # 2) Restore inventory
         for row in rows:
             used = float(row["used_qty"] or 0)
             if used <= 0:
                 continue
+
             c.execute("""
                 UPDATE inventory
                 SET qty_on_hand = qty_on_hand + ?
-                WHERE name = ?
-            """, (used, row["inv_name"]))
+                WHERE id = ?
+            """, (used, row["inv_id"]))
 
-        # 3) Delete order (order_lines will be removed via FK cascade)
+        # 3) Delete order
         c.execute("DELETE FROM orders WHERE id=?", (order_id,))
         c.commit()
         return True
@@ -1894,32 +2486,50 @@ def delete_order_and_restore(order_id: int) -> bool:
 
 
 def daily_sales_summary(date_str: str):
-    """Return item sales, discounts, COGS, and profit summary for a given date."""
+    """Return item sales, discounts, COGS, flavor add-ons, and profit summary for a given date."""
     with connect() as c:
-        # Item-level sales before discounts
+        # Item-level sales before discounts.
+        #
+        # Important:
+        #   i.price = base menu price
+        #   ol.unit_price = configured sold price after modifiers/flavors
+        #   order_line_modifiers = detail rows for flavor pump revenue
+        #
+        # We group by configured unit price so two different final prices for
+        # the same base drink stay visible instead of getting averaged together.
         lines = c.execute("""
-            SELECT i.id AS item_id,
-                   i.name AS item_name,
-                   SUM(ol.qty) AS qty_sold,
-                   i.price AS unit_price
+            SELECT
+                i.id AS item_id,
+                i.name AS item_name,
+                i.price AS base_unit_price,
+                ol.unit_price AS unit_price,
+                SUM(ol.qty) AS qty_sold,
+                ROUND(SUM(ol.qty * i.price), 2) AS base_gross,
+                ROUND(SUM(ol.qty * ol.unit_price), 2) AS gross,
+                ROUND(SUM(ol.qty * (ol.unit_price - i.price)), 2) AS modifier_gross
             FROM orders o
             JOIN order_lines ol ON o.id = ol.order_id
             JOIN items i ON i.id = ol.item_id
             WHERE DATE(o.ts) = ?
-            GROUP BY i.id
-            ORDER BY i.name
+            GROUP BY i.id, i.name, i.price, ol.unit_price
+            ORDER BY i.name, ol.unit_price
         """, (date_str,)).fetchall()
 
         items = []
         pre_discount_sales = 0.0
+        base_sales_total = 0.0
+        modifier_sales_total = 0.0
         cogs_total = 0.0
 
         for l in lines:
             item = dict(l)
             item_id = item["item_id"]
             qty_sold = float(item["qty_sold"] or 0)
+            base_unit_price = float(item["base_unit_price"] or 0)
             unit_price = float(item["unit_price"] or 0)
-            gross = qty_sold * unit_price
+            base_gross = float(item["base_gross"] or 0)
+            modifier_gross = float(item["modifier_gross"] or 0)
+            gross = float(item["gross"] or 0)
 
             comps = c.execute("""
                 SELECT r.qty_per_item,
@@ -1928,7 +2538,7 @@ def daily_sales_summary(date_str: str):
                             ELSE 0 END AS unit_cost
                 FROM recipes r
                 JOIN components comp ON comp.id = r.component_id
-                JOIN inventory inv ON inv.name = comp.name
+                JOIN inventory inv ON inv.id = comp.inventory_id
                 WHERE r.item_id = ?
             """, (item_id,)).fetchall()
 
@@ -1940,13 +2550,36 @@ def daily_sales_summary(date_str: str):
             items.append({
                 "name": item["item_name"],
                 "qty_sold": qty_sold,
-                "unit_price": unit_price,
+                "base_unit_price": round(base_unit_price, 2),
+                "unit_price": round(unit_price, 2),  # final configured price
+                "modifier_unit_price": round(unit_price - base_unit_price, 2),
+                "base_gross": round(base_gross, 2),
+                "modifier_gross": round(modifier_gross, 2),
                 "gross": round(gross, 2),
                 "cogs": round(cogs, 2)
             })
 
             pre_discount_sales += gross
+            base_sales_total += base_gross
+            modifier_sales_total += modifier_gross
             cogs_total += cogs
+
+        # Flavor/add-on breakdown by modifier name.
+        modifier_rows = c.execute("""
+            SELECT
+                olm.modifier_type,
+                olm.name,
+                SUM(olm.qty * ol.qty) AS qty_sold,
+                ROUND(SUM(olm.line_total * ol.qty), 2) AS gross
+            FROM orders o
+            JOIN order_lines ol ON o.id = ol.order_id
+            JOIN order_line_modifiers olm ON olm.order_line_id = ol.id
+            WHERE DATE(o.ts) = ?
+            GROUP BY olm.modifier_type, olm.name
+            ORDER BY olm.modifier_type, olm.name
+        """, (date_str,)).fetchall()
+
+        modifiers = [dict(r) for r in modifier_rows]
 
         # Order-level totals
         order_totals = c.execute("""
@@ -1959,7 +2592,6 @@ def daily_sales_summary(date_str: str):
             WHERE DATE(ts) = ?
         """, (date_str,)).fetchone()
 
-        subtotal_total = float(order_totals["subtotal_total"] or 0)
         discount_total = float(order_totals["discount_total"] or 0)
         tax_total = float(order_totals["tax_total"] or 0)
         net_sales = float(order_totals["net_sales"] or 0)
@@ -2003,7 +2635,10 @@ def daily_sales_summary(date_str: str):
         return {
             "date": date_str,
             "items": items,
+            "modifiers": modifiers,
 
+            "base_sales_total": round(base_sales_total, 2),
+            "modifier_sales_total": round(modifier_sales_total, 2),
             "pre_discount_sales": round(pre_discount_sales, 2),
             "gross_total": round(pre_discount_sales, 2),  # keeps old frontend compatible
 
@@ -2028,11 +2663,35 @@ def export_sales_to_xlsx(date_str: str) -> bytes:
     ws = wb.active
     ws.title = f"Sales {date_str}"
 
-    ws.append(["Item", "Qty Sold", "Unit Price", "Pre-Discount Sales", "COGS"])
+    ws.append(["Item", "Qty Sold", "Base Price", "Flavor/Add-on Per Item", "Final Unit Price", "Base Sales", "Flavor/Add-on Sales", "Pre-Discount Sales", "COGS"])
     for it in data["items"]:
-        ws.append([it["name"], it["qty_sold"], it["unit_price"], it["gross"], it["cogs"]])
+        ws.append([
+            it["name"],
+            it["qty_sold"],
+            it.get("base_unit_price", 0),
+            it.get("modifier_unit_price", 0),
+            it["unit_price"],
+            it.get("base_gross", 0),
+            it.get("modifier_gross", 0),
+            it["gross"],
+            it["cogs"]
+        ])
+
+    if data.get("modifiers"):
+        ws.append([])
+        ws.append(["Flavor/Add-on Breakdown"])
+        ws.append(["Type", "Name", "Qty Sold", "Gross"])
+        for m in data["modifiers"]:
+            ws.append([
+                m.get("modifier_type"),
+                m.get("name"),
+                m.get("qty_sold"),
+                m.get("gross")
+            ])
 
     ws.append([])
+    ws.append(["Base Item Sales", data.get("base_sales_total", 0)])
+    ws.append(["Flavor/Add-on Sales", data.get("modifier_sales_total", 0)])
     ws.append(["Pre-Discount Sales", data["pre_discount_sales"]])
     ws.append(["Discounts", -data["discount_total"]])
 
@@ -2065,31 +2724,42 @@ def export_sales_to_xlsx(date_str: str) -> bytes:
 
 def sales_summary_range(start_date: str, end_date: str):
     """
-    Aggregate item sales, discounts, COGS, and profit for DATE(ts)
+    Aggregate item sales, discounts, COGS, flavor add-ons, and profit for DATE(ts)
     BETWEEN start_date AND end_date inclusive.
     """
     with connect() as c:
         rows = c.execute("""
-            SELECT i.id AS item_id,
-                   i.name AS item_name,
-                   i.price AS unit_price,
-                   SUM(ol.qty) AS qty_sold
+            SELECT
+                i.id AS item_id,
+                i.name AS item_name,
+                i.price AS base_unit_price,
+                ol.unit_price AS unit_price,
+                SUM(ol.qty) AS qty_sold,
+                ROUND(SUM(ol.qty * i.price), 2) AS base_gross,
+                ROUND(SUM(ol.qty * ol.unit_price), 2) AS gross,
+                ROUND(SUM(ol.qty * (ol.unit_price - i.price)), 2) AS modifier_gross
             FROM orders o
             JOIN order_lines ol ON o.id = ol.order_id
             JOIN items i ON i.id = ol.item_id
             WHERE DATE(o.ts) BETWEEN ? AND ?
-            GROUP BY i.id
-            ORDER BY i.name
+            GROUP BY i.id, i.name, i.price, ol.unit_price
+            ORDER BY i.name, ol.unit_price
         """, (start_date, end_date)).fetchall()
 
         items = []
         pre_discount_sales = 0.0
+        base_sales_total = 0.0
+        modifier_sales_total = 0.0
         cogs_total = 0.0
 
         for r in rows:
+            item_id = r["item_id"]
             qty_sold = float(r["qty_sold"] or 0)
+            base_unit_price = float(r["base_unit_price"] or 0)
             unit_price = float(r["unit_price"] or 0)
-            gross = qty_sold * unit_price
+            base_gross = float(r["base_gross"] or 0)
+            modifier_gross = float(r["modifier_gross"] or 0)
+            gross = float(r["gross"] or 0)
 
             comps = c.execute("""
                 SELECT r.qty_per_item,
@@ -2098,9 +2768,9 @@ def sales_summary_range(start_date: str, end_date: str):
                             ELSE 0 END AS unit_cost
                 FROM recipes r
                 JOIN components comp ON comp.id = r.component_id
-                JOIN inventory inv ON inv.name = comp.name
+                JOIN inventory inv ON inv.id = comp.inventory_id
                 WHERE r.item_id = ?
-            """, (r["item_id"],)).fetchall()
+            """, (item_id,)).fetchall()
 
             cogs = sum(
                 qty_sold * float(x["qty_per_item"] or 0) * float(x["unit_cost"] or 0)
@@ -2110,13 +2780,35 @@ def sales_summary_range(start_date: str, end_date: str):
             items.append({
                 "name": r["item_name"],
                 "qty_sold": qty_sold,
-                "unit_price": unit_price,
+                "base_unit_price": round(base_unit_price, 2),
+                "unit_price": round(unit_price, 2),
+                "modifier_unit_price": round(unit_price - base_unit_price, 2),
+                "base_gross": round(base_gross, 2),
+                "modifier_gross": round(modifier_gross, 2),
                 "gross": round(gross, 2),
                 "cogs": round(cogs, 2),
             })
 
             pre_discount_sales += gross
+            base_sales_total += base_gross
+            modifier_sales_total += modifier_gross
             cogs_total += cogs
+
+        modifier_rows = c.execute("""
+            SELECT
+                olm.modifier_type,
+                olm.name,
+                SUM(olm.qty * ol.qty) AS qty_sold,
+                ROUND(SUM(olm.line_total * ol.qty), 2) AS gross
+            FROM orders o
+            JOIN order_lines ol ON o.id = ol.order_id
+            JOIN order_line_modifiers olm ON olm.order_line_id = ol.id
+            WHERE DATE(o.ts) BETWEEN ? AND ?
+            GROUP BY olm.modifier_type, olm.name
+            ORDER BY olm.modifier_type, olm.name
+        """, (start_date, end_date)).fetchall()
+
+        modifiers = [dict(r) for r in modifier_rows]
 
         order_totals = c.execute("""
             SELECT
@@ -2128,7 +2820,6 @@ def sales_summary_range(start_date: str, end_date: str):
             WHERE DATE(ts) BETWEEN ? AND ?
         """, (start_date, end_date)).fetchone()
 
-        subtotal_total = float(order_totals["subtotal_total"] or 0)
         discount_total = float(order_totals["discount_total"] or 0)
         tax_total = float(order_totals["tax_total"] or 0)
         net_sales = float(order_totals["net_sales"] or 0)
@@ -2171,7 +2862,10 @@ def sales_summary_range(start_date: str, end_date: str):
             "start": start_date,
             "end": end_date,
             "items": items,
+            "modifiers": modifiers,
 
+            "base_sales_total": round(base_sales_total, 2),
+            "modifier_sales_total": round(modifier_sales_total, 2),
             "pre_discount_sales": round(pre_discount_sales, 2),
             "gross_total": round(pre_discount_sales, 2),
 
@@ -2197,6 +2891,8 @@ def export_sales_range_to_xlsx(start_date: str, end_date: str) -> bytes:
     ws1.title = "Summary"
     ws1.append([f"Sales Summary {data['start']} to {data['end']}"])
     ws1.append([])
+    ws1.append(["Base Item Sales", data.get("base_sales_total", 0)])
+    ws1.append(["Flavor/Add-on Sales", data.get("modifier_sales_total", 0)])
     ws1.append(["Pre-Discount Sales", data["pre_discount_sales"]])
     ws1.append(["Discounts", -data["discount_total"]])
 
@@ -2222,9 +2918,30 @@ def export_sales_range_to_xlsx(start_date: str, end_date: str) -> bytes:
 
     # Sheet 2: By Item
     ws2 = wb.create_sheet("By Item")
-    ws2.append(["Item", "Qty Sold", "Unit Price", "Pre-Discount Sales", "COGS"])
+    ws2.append(["Item", "Qty Sold", "Base Price", "Flavor/Add-on Per Item", "Final Unit Price", "Base Sales", "Flavor/Add-on Sales", "Pre-Discount Sales", "COGS"])
     for it in data["items"]:
-        ws2.append([it["name"], it["qty_sold"], it["unit_price"], it["gross"], it["cogs"]])
+        ws2.append([
+            it["name"],
+            it["qty_sold"],
+            it.get("base_unit_price", 0),
+            it.get("modifier_unit_price", 0),
+            it["unit_price"],
+            it.get("base_gross", 0),
+            it.get("modifier_gross", 0),
+            it["gross"],
+            it["cogs"]
+        ])
+
+    if data.get("modifiers"):
+        ws3 = wb.create_sheet("Flavor Add-ons")
+        ws3.append(["Type", "Name", "Qty Sold", "Gross"])
+        for m in data["modifiers"]:
+            ws3.append([
+                m.get("modifier_type"),
+                m.get("name"),
+                m.get("qty_sold"),
+                m.get("gross")
+            ])
 
     buf = io.BytesIO()
     wb.save(buf)

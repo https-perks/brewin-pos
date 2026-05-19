@@ -1,43 +1,52 @@
 {% extends "layout.html" %}
 {% block content %}
+
 <!-- Shift Start Modal -->
 <div class="modal fade" id="shiftModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Start Shift</h5>
+        <h5 class="modal-title">Start Register</h5>
       </div>
       <div class="modal-body">
+        <div class="alert alert-info mb-3">
+          Start a normal cash shift to sell items, or enter Admin Mode to review inventory/reports without opening the till.
+        </div>
+
         <div class="mb-3">
           <label class="form-label">Cashier Name</label>
           <input id="shiftCashier" type="text" class="form-control" required>
         </div>
-        <div class="mb-3">
-          <label class="form-label">Opening Float ($)</label>
-          <input id="shiftFloat" type="number" step="0.01" class="form-control" required>
-        </div>
+
+        <h6 class="mb-2">Opening Till Count</h6>
+        <div id="openingTillCount" class="till-count-grid"></div>
+        <div class="till-totals-panel fs-5"><strong>Opening Till Total:</strong> $<span id="openingTillTotal">0.00</span></div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" onclick="startShift()">Start Shift</button>
+      <div class="modal-footer d-flex justify-content-between">
+        <button class="btn btn-outline-secondary" onclick="enterAdminMode()">Enter Admin Mode</button>
+        <button class="btn btn-primary" onclick="startShift()">Start Cash Shift</button>
       </div>
     </div>
   </div>
 </div>
 <!-- Close Shift Modal -->
 <div class="modal fade" id="closeShiftModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Close Shift</h5>
       </div>
       <div class="modal-body">
         <p id="shiftSummary"></p>
-        <div class="mb-3">
-          <label class="form-label">Till Count ($)</label>
-          <input id="tillCount" type="number" step="0.01" class="form-control">
+
+        <h6 class="mb-2">Closing Till Count</h6>
+        <div id="closingTillCount" class="till-count-grid"></div>
+
+        <div class="till-totals-panel">
+          <p class="mb-2"><strong>Actual Till:</strong> $<span id="actualTill">0.00</span></p>
+          <p class="mb-2"><strong>Expected Till:</strong> $<span id="expectedTill">0.00</span></p>
+          <p class="mb-0"><strong>Over/Short:</strong> $<span id="overShort">0.00</span></p>
         </div>
-        <p><strong>Expected Till:</strong> $<span id="expectedTill">0.00</span></p>
-        <p><strong>Over/Short:</strong> $<span id="overShort">0.00</span></p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -49,18 +58,31 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="m-0">POS Register</h2>
-  <button class="btn btn-danger" onclick="openCloseShiftModal()">Close Shift</button>
+  <button id="closeShiftBtn" class="btn btn-danger" onclick="openCloseShiftModal()">Close Shift</button>
 </div>
-<div id="items" class="d-flex flex-wrap"></div>
+<div class="pos-register-layout">
+  <aside class="pos-category-sidebar">
+    <div class="pos-sidebar-title">Categories</div>
+    <div id="categoryMenu" class="pos-category-menu"></div>
+  </aside>
+
+  <main class="pos-item-panel">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h4 id="activeCategoryTitle" class="m-0">Items</h4>
+      <span id="activeCategoryCount" class="text-muted small"></span>
+    </div>
+    <div id="items" class="pos-item-grid"></div>
+  </main>
+</div>
 <hr>
 <h4>Cart</h4>
 <ul id="cart" class="list-group"></ul>
 <p class="mt-3">Total: $<span id="total">0.00</span></p><br>
-<button class="btn btn-warning" onclick="openDiscount()">Discount</button>
-<button class="btn btn-success" onclick="checkout()">Complete Sale</button>
+<button id="discountBtn" class="btn btn-warning" onclick="openDiscount()">Discount</button>
+<button id="completeSaleBtn" class="btn btn-success" onclick="checkout()">Complete Sale</button>
 <div>
   <hr>
-<button class="btn btn-secondary" onclick="clearDiscount()">Remove Manual Discount</button>
+<button id="clearDiscountBtn" class="btn btn-secondary" onclick="clearDiscount()">Remove Manual Discount</button>
 </div>
 
 <!-- Discount PIN Modal -->
@@ -128,50 +150,279 @@
   </div>
 </div>
 
+<!-- Item Options Modal -->
+<div class="modal fade" id="itemOptionsModal" tabindex="-1" aria-labelledby="itemOptionsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="itemOptionsModalLabel">Choose Item</h5>
+          <div class="text-muted small" id="itemOptionsCategory"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <h6 class="mb-2">Size / Option</h6>
+        <div id="itemSizeOptions" class="pos-size-options mb-4"></div>
+
+        <div id="flavorOptionsBlock" class="border rounded p-3 bg-light mb-4" style="display:none;">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">Flavor Pumps</h6>
+            <span class="badge text-bg-secondary">$0.25 per pump</span>
+          </div>
+          <p class="text-muted small mb-3">
+            Tap + to add pumps. Use − to fix a misclick. Flavors only appear for drinks.
+          </p>
+          <div id="flavorPumpOptions" class="flavor-pump-list"></div>
+        </div>
+
+        <div class="pos-config-summary">
+          <div>
+            <div class="text-muted small">Selected item</div>
+            <div id="itemConfigSelection" class="fw-semibold">Choose a size</div>
+          </div>
+          <div class="text-end">
+            <div class="text-muted small">Item Total</div>
+            <div class="pos-config-total">$<span id="itemConfigTotal">0.00</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="addConfiguredItemBtn" class="btn btn-success" onclick="addConfiguredItem()" disabled>Add to Cart</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   let shiftModal;
+  let itemOptionsModal;
+  let selectedCategory = null;
+  let selectedItemGroup = null;
+  let selectedModalItem = null;
+  let selectedFlavorPumps = {};
+  let activeFlavors = [];
+  const FLAVOR_PUMP_DEFAULT_PRICE = 0.25;
+  const MAX_PUMPS_PER_FLAVOR = 10;
+  let adminMode = sessionStorage.getItem("brewins_admin_mode") === "1";
+
+  const TILL_DENOMS = [
+    ["hundreds", "$100"],
+    ["fifties", "$50"],
+    ["twenties", "$20"],
+    ["tens", "$10"],
+    ["fives", "$5"],
+    ["ones", "$1"],
+    ["quarters", "Quarters"],
+    ["dimes", "Dimes"],
+    ["nickels", "Nickels"],
+    ["pennies", "Pennies"]
+  ];
+
+  const TILL_VALUES = {
+    hundreds: 100,
+    fifties: 50,
+    twenties: 20,
+    tens: 10,
+    fives: 5,
+    ones: 1,
+    quarters: 0.25,
+    dimes: 0.10,
+    nickels: 0.05,
+    pennies: 0.01
+  };
 
   document.addEventListener('DOMContentLoaded', async () => {
+    renderTillInputs("openingTillCount", "opening");
+    renderTillInputs("closingTillCount", "closing");
+
     shiftModal = new bootstrap.Modal(document.getElementById('shiftModal'));
+    itemOptionsModal = new bootstrap.Modal(document.getElementById('itemOptionsModal'));
     const shift = await fetch('/api/shift/active').then(r => r.json());
-    if (!shift.id) {
-      // No shift active — force modal
+
+    if (shift.id) {
+      adminMode = false;
+      sessionStorage.removeItem("brewins_admin_mode");
+    }
+
+    if (!shift.id && !adminMode) {
       shiftModal.show();
     }
+
+    await loadFlavors();
     checkShiftLock();
   });
 
+  function renderTillInputs(containerId, prefix) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const billKeys = ["hundreds", "fifties", "twenties", "tens", "fives", "ones"];
+    const coinKeys = ["quarters", "dimes", "nickels", "pennies"];
+
+    const coinDisplay = {
+      quarters: { value: "25¢", name: "Quarter" },
+      dimes: { value: "10¢", name: "Dime" },
+      nickels: { value: "5¢", name: "Nickel" },
+      pennies: { value: "1¢", name: "Penny" }
+    };
+
+    container.innerHTML = `
+      <div class="till-grid">
+        <div class="till-denom-section">
+          <div class="till-denom-heading">Bills</div>
+          <div class="till-denom-list" data-group="bills"></div>
+        </div>
+
+        <div class="till-denom-section">
+          <div class="till-denom-heading">Coins</div>
+          <div class="till-denom-list" data-group="coins"></div>
+        </div>
+      </div>
+    `;
+
+    function makeRow(key, label, isCoin) {
+      const row = document.createElement("div");
+      row.className = "denom-row";
+
+      const visualLabel = isCoin
+        ? `<span class="denom-label coin"><span>${coinDisplay[key].value}</span><span class="coin-name">${coinDisplay[key].name}</span></span>`
+        : `<span class="denom-label bill">${label}</span>`;
+
+      row.innerHTML = `
+        ${visualLabel}
+        <input
+          id="${prefix}_${key}"
+          data-denom="${key}"
+          data-prefix="${prefix}"
+          type="number"
+          min="0"
+          step="1"
+          value="0"
+          class="form-control denom-input till-denom-input"
+          inputmode="numeric"
+        >
+      `;
+
+      return row;
+    }
+
+    const billsContainer = container.querySelector('[data-group="bills"]');
+    const coinsContainer = container.querySelector('[data-group="coins"]');
+
+    TILL_DENOMS.forEach(([key, label]) => {
+      if (billKeys.includes(key)) {
+        billsContainer.appendChild(makeRow(key, label, false));
+      }
+
+      if (coinKeys.includes(key)) {
+        coinsContainer.appendChild(makeRow(key, label, true));
+      }
+    });
+
+    container.querySelectorAll(".till-denom-input").forEach(input => {
+      input.addEventListener("input", () => {
+        if (prefix === "opening") updateOpeningTillTotal();
+        if (prefix === "closing") calcOverShort();
+      });
+    });
+  }
+
+  function getTillCount(prefix) {
+    const counts = {};
+
+    TILL_DENOMS.forEach(([key]) => {
+      const input = document.getElementById(`${prefix}_${key}`);
+      counts[key] = Math.max(0, parseInt(input?.value || "0", 10) || 0);
+    });
+
+    return counts;
+  }
+
+  function calculateTillTotal(prefix) {
+    const counts = getTillCount(prefix);
+    let total = 0;
+
+    Object.keys(counts).forEach(key => {
+      total += counts[key] * TILL_VALUES[key];
+    });
+
+    return Math.round(total * 100) / 100;
+  }
+
+  function updateOpeningTillTotal() {
+    document.getElementById("openingTillTotal").textContent = calculateTillTotal("opening").toFixed(2);
+  }
+
+  function enterAdminMode() {
+    adminMode = true;
+    activeCashier = "Admin Mode";
+    sessionStorage.setItem("brewins_admin_mode", "1");
+    shiftModal.hide();
+    clearCartForModeChange();
+    checkShiftLock();
+  }
+
   async function startShift() {
     const cashier = document.getElementById('shiftCashier').value.trim();
-    const opening = parseFloat(document.getElementById('shiftFloat').value || 0);
-    if (!cashier || isNaN(opening)) {
-      alert("Please fill out both fields.");
+    const till_count = getTillCount("opening");
+    const opening = calculateTillTotal("opening");
+
+    if (!cashier) {
+      alert("Please enter the cashier name.");
       return;
     }
 
-    await fetch('/api/shift/start', {
+    const res = await fetch('/api/shift/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cashier, opening_float: opening })
-    }).then(r => {
-      if (!r.ok) throw new Error("Failed to start shift.");
-      return r.json();
+      body: JSON.stringify({ cashier, till_count })
+    }).then(async r => {
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || "Failed to start shift.");
+      return data;
     });
 
-    alert(`Shift started for ${cashier} with $${opening.toFixed(2)} float.`);
+    adminMode = false;
+    sessionStorage.removeItem("brewins_admin_mode");
+
+    alert(`Shift started for ${cashier} with $${Number(res.opening_float ?? opening).toFixed(2)} opening till.`);
     shiftModal.hide();
     checkShiftLock();
   }
 
+  function clearCartForModeChange() {
+    cart = [];
+    manualSale = null;
+    manualSaleResult = null;
+    autoSaleResult = null;
+    securityAuthorizedForSale = false;
+    discount = 0;
+    discount_type = null;
+    manualDiscountAuth = null;
+    if (typeof renderCart === "function") renderCart();
+  }
+
   async function checkShiftLock() {
     const shift = await fetch('/api/shift/active').then(r => r.json());
-    activeCashier = shift.cashier || null;
-    if (!shift.id) {
-      document.getElementById('items').style.pointerEvents = 'none';
-      document.getElementById('items').style.opacity = '0.3';
-    } else {
-      document.getElementById('items').style.pointerEvents = 'auto';
-      document.getElementById('items').style.opacity = '1';
+    const hasShift = !!shift.id;
+    activeCashier = hasShift ? shift.cashier : (adminMode ? "Admin Mode" : null);
+
+    const salesLocked = !hasShift;
+    const itemsEl = document.getElementById('items');
+
+    itemsEl.style.pointerEvents = salesLocked ? 'none' : 'auto';
+    itemsEl.style.opacity = salesLocked ? '0.3' : '1';
+
+    document.getElementById('completeSaleBtn').disabled = salesLocked;
+    document.getElementById('discountBtn').disabled = salesLocked;
+    document.getElementById('clearDiscountBtn').disabled = salesLocked;
+    document.getElementById('closeShiftBtn').disabled = !hasShift;
+
+    if (adminMode && !hasShift) {
+      document.getElementById('total').textContent = '0.00';
     }
   }
 
@@ -179,45 +430,384 @@
   let items = [];
   let cart = [];
 
-  // Load items and render buttons
+  // Load items and render grouped POS buttons
+  function getItemCategory(it) {
+    return (it.category || "Uncategorized").trim() || "Uncategorized";
+  }
+
+  function getItemGroupName(it) {
+    return (it.display_group || it.name || "Unnamed Item").trim();
+  }
+
+  function getItemSizeLabel(it) {
+    return (it.size_label || "").trim();
+  }
+
+  function getCategoriesFromItems() {
+    const categories = [...new Set(items.map(getItemCategory))].sort((a, b) => a.localeCompare(b));
+    return categories;
+  }
+
+  function getGroupedItemsForCategory(category) {
+    const map = new Map();
+
+    items
+      .filter(it => getItemCategory(it) === category)
+      .forEach(it => {
+        const groupName = getItemGroupName(it);
+
+        if (!map.has(groupName)) {
+          map.set(groupName, {
+            name: groupName,
+            category,
+            items: [],
+            in_stock: false,
+            available_qty: 0,
+            min_price: Number(it.price || 0),
+            max_price: Number(it.price || 0),
+            allow_flavors: false
+          });
+        }
+
+        const group = map.get(groupName);
+        group.items.push(it);
+        group.in_stock = group.in_stock || !!it.in_stock;
+        group.available_qty = Math.max(group.available_qty || 0, Number(it.available_qty || 0));
+        group.min_price = Math.min(group.min_price, Number(it.price || 0));
+        group.max_price = Math.max(group.max_price, Number(it.price || 0));
+        group.allow_flavors = group.allow_flavors || Number(it.allow_flavors || 0) === 1;
+      });
+
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function renderCategoryMenu() {
+    const menu = document.getElementById("categoryMenu");
+    if (!menu) return;
+
+    const categories = getCategoriesFromItems();
+
+    if (!selectedCategory || !categories.includes(selectedCategory)) {
+      selectedCategory = categories[0] || null;
+    }
+
+    menu.innerHTML = "";
+
+    categories.forEach(category => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn pos-category-btn";
+      if (category === selectedCategory) btn.classList.add("active");
+      btn.textContent = category;
+      btn.onclick = () => {
+        selectedCategory = category;
+        renderPOSGroups();
+      };
+      menu.appendChild(btn);
+    });
+  }
+
+  function renderPOSGroups() {
+    const div = document.getElementById('items');
+    const title = document.getElementById('activeCategoryTitle');
+    const count = document.getElementById('activeCategoryCount');
+
+    if (!div) return;
+
+    div.innerHTML = "";
+
+    if (!selectedCategory) {
+      if (title) title.textContent = "Items";
+      if (count) count.textContent = "No items";
+      div.innerHTML = "<p class='text-muted'>No POS items found.</p>";
+      return;
+    }
+
+    const groups = getGroupedItemsForCategory(selectedCategory);
+
+    if (title) title.textContent = selectedCategory;
+    if (count) count.textContent = `${groups.length} item${groups.length === 1 ? "" : "s"}`;
+
+    groups.forEach(group => {
+      const btn = document.createElement('button');
+      btn.className = 'btn pos-item-btn';
+
+      if (group.in_stock) {
+        btn.classList.add('btn-primary');
+
+        const lowStock = group.available_qty < 5 && group.available_qty < 100000000;
+
+        btn.innerHTML = `
+          <span class="pos-item-name">${group.name}</span>
+          <span class="pos-item-meta">${lowStock ? `${group.available_qty} left` : "Choose options"}</span>
+        `;
+
+        btn.onclick = () => openItemOptions(group);
+      } else {
+        btn.classList.add('btn-secondary');
+        btn.disabled = true;
+        btn.innerHTML = `
+          <span class="pos-item-name">${group.name}</span>
+          <span class="pos-item-meta">Out of Stock</span>
+        `;
+      }
+
+      if (group.in_stock && group.available_qty <= 3) {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-warning');
+      }
+
+      div.appendChild(btn);
+    });
+
+    checkShiftLock();
+  }
+
+
+  async function loadFlavors() {
+    try {
+      activeFlavors = await fetch('/api/flavors').then(r => r.json());
+    } catch (err) {
+      console.error("Could not load flavors:", err);
+      activeFlavors = [];
+    }
+  }
+
+  function isFlavorAllowedForGroup(group) {
+    if (!group) return false;
+    const flavorHintText = `${group.category} ${group.name}`.toLowerCase();
+    const looksLikeDrink = /drink|drinks|coffee|tea|cocoa|latte|fog|charger|espresso|mocha|cappuccino|americano|beverage/.test(flavorHintText);
+    return !!group.allow_flavors || looksLikeDrink;
+  }
+
+  function getFlavorPumpCount(flavorId) {
+    return Number(selectedFlavorPumps[String(flavorId)] || 0);
+  }
+
+  function setFlavorPumpCount(flavorId, qty) {
+    const key = String(flavorId);
+    const safeQty = Math.max(0, Math.min(MAX_PUMPS_PER_FLAVOR, Number(qty || 0)));
+
+    if (safeQty <= 0) {
+      delete selectedFlavorPumps[key];
+    } else {
+      selectedFlavorPumps[key] = safeQty;
+    }
+
+    renderFlavorPumpOptions();
+    updateItemConfigTotal();
+  }
+
+  function getSelectedFlavorDetails() {
+    return activeFlavors
+      .map(flavor => ({
+        id: flavor.id,
+        name: flavor.name,
+        price_per_pump: Number(flavor.price_per_pump ?? FLAVOR_PUMP_DEFAULT_PRICE),
+        pumps: getFlavorPumpCount(flavor.id)
+      }))
+      .filter(flavor => flavor.pumps > 0);
+  }
+
+  function getFlavorTotal() {
+    return getSelectedFlavorDetails().reduce((total, flavor) => {
+      return total + (Number(flavor.price_per_pump || 0) * Number(flavor.pumps || 0));
+    }, 0);
+  }
+
+  function renderFlavorPumpOptions() {
+    const block = document.getElementById("flavorOptionsBlock");
+    const list = document.getElementById("flavorPumpOptions");
+    if (!block || !list) return;
+
+    const allowed = isFlavorAllowedForGroup(selectedItemGroup);
+    block.style.display = allowed ? "block" : "none";
+
+    if (!allowed) {
+      selectedFlavorPumps = {};
+      list.innerHTML = "";
+      return;
+    }
+
+    if (!activeFlavors.length) {
+      list.innerHTML = "<p class='text-muted mb-0'>No active flavors found.</p>";
+      return;
+    }
+
+    list.innerHTML = "";
+
+    activeFlavors.forEach(flavor => {
+      const pumps = getFlavorPumpCount(flavor.id);
+      const price = Number(flavor.price_per_pump ?? FLAVOR_PUMP_DEFAULT_PRICE);
+
+      const row = document.createElement("div");
+      row.className = "flavor-pump-row";
+      row.innerHTML = `
+        <div class="flavor-pump-name">
+          <strong>${flavor.name}</strong>
+          <small>$${price.toFixed(2)} / pump</small>
+        </div>
+        <div class="flavor-pump-controls">
+          <button type="button" class="btn btn-outline-secondary btn-sm" ${pumps <= 0 ? "disabled" : ""}>−</button>
+          <span class="flavor-pump-count">${pumps}</span>
+          <button type="button" class="btn btn-outline-primary btn-sm" ${pumps >= MAX_PUMPS_PER_FLAVOR ? "disabled" : ""}>+</button>
+        </div>
+      `;
+
+      const minus = row.querySelector("button:first-of-type");
+      const plus = row.querySelector("button:last-of-type");
+      minus.onclick = () => setFlavorPumpCount(flavor.id, pumps - 1);
+      plus.onclick = () => setFlavorPumpCount(flavor.id, pumps + 1);
+
+      list.appendChild(row);
+    });
+  }
+
+  // Load items and render category/group buttons
   function loadPOSItems() {
     fetch('/api/items')
       .then(r => r.json())
       .then(data => {
         items = data;
-        const div = document.getElementById('items');
-        div.innerHTML = ''; // Clear old buttons
-
-        data.forEach(it => {
-          const btn = document.createElement('button');
-          btn.className = 'btn btn-lg m-2 w-100';
-
-          if (it.in_stock) {
-            btn.classList.add('btn-primary');
-            const label = it.available_qty < 5
-              ? `${it.name} — $${it.price.toFixed(2)} (${it.available_qty} left)`
-              : `${it.name} — $${it.price.toFixed(2)}`;
-            btn.textContent = label;
-            btn.onclick = () => add(it);
-          } else {
-            btn.classList.add('btn-secondary');
-            btn.disabled = true;
-            btn.textContent = `${it.name} — Out of Stock (0 left)`;
-          }
-
-          if (it.in_stock && it.available_qty <= 3) {
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-warning');
-          }
-
-          div.appendChild(btn);
-        });
+        renderCategoryMenu();
+        renderPOSGroups();
       });
   }
 
-  function add(it) {
-    const existing = cart.find(l => l.id === it.id);
-    const inCartQty = existing ? existing.qty : 0;
+  function openItemOptions(group) {
+    selectedItemGroup = group;
+    selectedModalItem = null;
+    selectedFlavorPumps = {};
+
+    document.getElementById("itemOptionsModalLabel").textContent = group.name;
+    document.getElementById("itemOptionsCategory").textContent = group.category;
+    updateItemConfigTotal();
+
+    const sizeDiv = document.getElementById("itemSizeOptions");
+    sizeDiv.innerHTML = "";
+
+    const sortedOptions = [...group.items].sort((a, b) => {
+      const aLabel = getItemSizeLabel(a) || a.name;
+      const bLabel = getItemSizeLabel(b) || b.name;
+      return aLabel.localeCompare(bLabel, undefined, { numeric: true });
+    });
+
+    sortedOptions.forEach(it => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn pos-size-btn";
+
+      const label = getItemSizeLabel(it) || it.name;
+      const lowStock = it.available_qty < 5 && it.available_qty < 100000000;
+
+      if (it.in_stock) {
+        btn.classList.add("btn-outline-primary");
+        btn.innerHTML = `
+          <span>${label}</span>
+          ${lowStock ? `<small>${it.available_qty} left</small>` : ""}
+        `;
+        btn.onclick = () => selectModalItem(it);
+      } else {
+        btn.classList.add("btn-outline-secondary");
+        btn.disabled = true;
+        btn.innerHTML = `
+          <span>${label}</span>
+          <strong>Out</strong>
+        `;
+      }
+
+      sizeDiv.appendChild(btn);
+    });
+
+    if (sortedOptions.length === 1 && sortedOptions[0].in_stock) {
+      selectModalItem(sortedOptions[0]);
+    }
+
+    renderFlavorPumpOptions();
+    updateItemConfigTotal();
+
+    itemOptionsModal.show();
+  }
+
+  function selectModalItem(it) {
+    selectedModalItem = it;
+
+    document.querySelectorAll("#itemSizeOptions .pos-size-btn").forEach(btn => {
+      btn.classList.remove("active");
+    });
+
+    const selectedLabel = getItemSizeLabel(it) || it.name;
+    const buttons = [...document.querySelectorAll("#itemSizeOptions .pos-size-btn")];
+    const selectedBtn = buttons.find(btn => btn.textContent.trim().startsWith(selectedLabel));
+    if (selectedBtn) selectedBtn.classList.add("active");
+
+    updateItemConfigTotal();
+  }
+
+  function updateItemConfigTotal() {
+    const selectionEl = document.getElementById("itemConfigSelection");
+    const totalEl = document.getElementById("itemConfigTotal");
+    const addBtn = document.getElementById("addConfiguredItemBtn");
+
+    if (!selectionEl || !totalEl || !addBtn) return;
+
+    if (!selectedModalItem) {
+      selectionEl.textContent = "Choose a size";
+      totalEl.textContent = "0.00";
+      addBtn.disabled = true;
+      return;
+    }
+
+    const label = getItemSizeLabel(selectedModalItem) || selectedModalItem.name;
+    const basePrice = Number(selectedModalItem.price || 0);
+    const flavorTotal = getFlavorTotal();
+    const configuredTotal = Math.round((basePrice + flavorTotal) * 100) / 100;
+    const selectedFlavors = getSelectedFlavorDetails();
+    const flavorText = selectedFlavors.length
+      ? ` — ${selectedFlavors.map(f => `${f.name} x${f.pumps}`).join(", ")}`
+      : "";
+
+    selectionEl.textContent = `${label}${flavorText}`;
+    totalEl.textContent = configuredTotal.toFixed(2);
+    addBtn.disabled = false;
+  }
+
+  function addConfiguredItem() {
+    if (!selectedModalItem) {
+      alert("Choose a size first.");
+      return;
+    }
+
+    const basePrice = Number(selectedModalItem.price || 0);
+    const flavors = getSelectedFlavorDetails();
+    const flavorTotal = getFlavorTotal();
+    const configuredPrice = Math.round((basePrice + flavorTotal) * 100) / 100;
+    const sizeLabel = getItemSizeLabel(selectedModalItem);
+    const flavorSuffix = flavors.length
+      ? ` + ${flavors.map(f => `${f.name} x${f.pumps}`).join(", ")}`
+      : "";
+    const displayName = `${selectedModalItem.name}${flavorSuffix}`;
+    const optionKey = JSON.stringify(flavors.map(f => [f.id, f.pumps]));
+
+    add(selectedModalItem, {
+      line_key: `${selectedModalItem.id}|${optionKey}`,
+      display_name: displayName,
+      base_name: selectedModalItem.name,
+      size_label: sizeLabel,
+      price: configuredPrice,
+      base_price: basePrice,
+      flavors
+    });
+
+    itemOptionsModal.hide();
+  }
+
+  function add(it, config = {}) {
+    const lineKey = config.line_key || `${it.id}|base`;
+    const existing = cart.find(l => l.line_key === lineKey);
+    const inCartQty = cart
+      .filter(l => Number(l.id) === Number(it.id))
+      .reduce((total, line) => total + Number(line.qty || 0), 0);
 
     // Check if adding another exceeds available stock
     if (it.available_qty !== undefined && inCartQty + 1 > it.available_qty) {
@@ -227,11 +817,15 @@
 
     if (existing) existing.qty++;
     else cart.push({
+        line_key: lineKey,
         id: it.id,
         sku: it.sku,
-        name: it.name,
+        name: config.display_name || it.name,
+        base_name: config.base_name || it.name,
         category: it.category,
-        price: it.price,
+        price: Number(config.price ?? it.price),
+        base_price: Number(config.base_price ?? it.price),
+        flavors: config.flavors || [],
         available_qty: it.available_qty,
         qty: 1
     });
@@ -683,7 +1277,7 @@ function getFinalTotal() {
       const minusBtn = document.createElement('button');
       minusBtn.className = 'btn btn-sm btn-outline-secondary';
       minusBtn.textContent = '−';
-      minusBtn.onclick = () => updateQty(l.id, l.qty - 1);
+      minusBtn.onclick = () => updateQty(l.line_key || l.id, l.qty - 1);
 
       const qtySpan = document.createElement('span');
       qtySpan.textContent = `x${l.qty}`;
@@ -691,7 +1285,7 @@ function getFinalTotal() {
       const plusBtn = document.createElement('button');
       plusBtn.className = 'btn btn-sm btn-outline-secondary';
       plusBtn.textContent = '+';
-      plusBtn.onclick = () => updateQty(l.id, l.qty + 1);
+      plusBtn.onclick = () => updateQty(l.line_key || l.id, l.qty + 1);
 
       const nameSpan = document.createElement('span');
       nameSpan.textContent = l.name;
@@ -707,7 +1301,7 @@ function getFinalTotal() {
       const delBtn = document.createElement('button');
       delBtn.className = 'btn btn-sm btn-danger';
       delBtn.textContent = '🗑';
-      delBtn.onclick = () => removeFromCart(l.id);
+      delBtn.onclick = () => removeFromCart(l.line_key || l.id);
 
       rightDiv.append(priceSpan, delBtn);
 
@@ -752,19 +1346,24 @@ function getFinalTotal() {
 // Cart Rendering and Management
 //--------------------------------------------------------------------------------
 
-  function updateQty(id, newQty) {
-    const item = cart.find(i => i.id === id);
+  function updateQty(lineKey, newQty) {
+    const item = cart.find(i => (i.line_key || i.id) === lineKey);
     if (!item) return;
 
-    // Enforce stock limit
-    if (newQty > item.available_qty) {
-      alert(`⚠️ Only ${item.available_qty} of "${item.name}" in stock.`);
-      newQty = item.available_qty;
+    const currentLineQty = Number(item.qty || 0);
+    const otherQtyForSameItem = cart
+      .filter(i => Number(i.id) === Number(item.id) && (i.line_key || i.id) !== lineKey)
+      .reduce((total, line) => total + Number(line.qty || 0), 0);
+
+    // Enforce stock limit across all configured versions of the same base item.
+    if (otherQtyForSameItem + newQty > item.available_qty) {
+      alert(`⚠️ Only ${item.available_qty} of "${item.base_name || item.name}" in stock.`);
+      newQty = Math.max(0, item.available_qty - otherQtyForSameItem);
     }
 
     // Remove item if qty is 0
     if (newQty <= 0) {
-      cart = cart.filter(i => i.id !== id);
+      cart = cart.filter(i => (i.line_key || i.id) !== lineKey);
     } else {
       item.qty = newQty;
     }
@@ -772,8 +1371,8 @@ function getFinalTotal() {
     renderCart();
   }
 
-  function removeFromCart(id) {
-    cart = cart.filter(i => i.id !== id);
+  function removeFromCart(lineKey) {
+    cart = cart.filter(i => (i.line_key || i.id) !== lineKey);
     renderCart();
   }
 
@@ -785,7 +1384,13 @@ function getFinalTotal() {
     document.getElementById('confirmCheckout').addEventListener('click', confirmCheckout);
   });
 
-  function checkout() {
+  async function checkout() {
+    const shift = await fetch('/api/shift/active').then(r => r.json());
+    if (!shift.id || adminMode) {
+      alert("Sales are locked. Start a cash shift before completing a sale.");
+      return;
+    }
+
     recalculateDiscounts();
 
     if (cart.length === 0) {
@@ -819,7 +1424,13 @@ function getFinalTotal() {
     document.getElementById('changeDue').textContent = change.toFixed(2);
   }
 
-  function confirmCheckout() {
+  async function confirmCheckout() {
+    const shift = await fetch('/api/shift/active').then(r => r.json());
+    if (!shift.id || adminMode) {
+      alert("Sales are locked. Start a cash shift before completing a sale.");
+      return;
+    }
+
     recalculateDiscounts();
 
     const total = parseFloat(document.getElementById('checkout-total').textContent);
@@ -836,8 +1447,15 @@ function getFinalTotal() {
       method: "Cash",
       lines: cart.map(c => ({
         // Use SKU when present, otherwise fall back to the item name
-        item_sku: c.sku || c.name,
-        qty: c.qty
+        item_sku: c.sku || c.base_name || c.name,
+        qty: c.qty,
+        unit_price: Number(c.price || 0),
+        modifiers: (c.flavors || []).map(f => ({
+          type: "flavor",
+          name: f.name,
+          qty: Number(f.pumps || 0),
+          unit_price: Number(f.price_per_pump || 0.25)
+        }))
       })),
       discount:discount,
       discount_type: discount_type || null,
@@ -916,7 +1534,11 @@ setInterval(() => {
     document.getElementById('shiftSummary').innerText =
       `Cashier: ${shift.cashier}\nStarted: ${started}`;
     document.getElementById('expectedTill').textContent = expected.toFixed(2);
-    document.getElementById('tillCount').value = '';
+    TILL_DENOMS.forEach(([key]) => {
+      const input = document.getElementById(`closing_${key}`);
+      if (input) input.value = 0;
+    });
+    document.getElementById('actualTill').textContent = '0.00';
     document.getElementById('overShort').textContent = '0.00';
 
     closeShiftModal.show();
@@ -924,18 +1546,18 @@ setInterval(() => {
 
   function calcOverShort() {
     const expected = parseFloat(document.getElementById('expectedTill').textContent) || 0;
-    const actual = parseFloat(document.getElementById('tillCount').value) || 0;
+    const actual = calculateTillTotal("closing");
+    document.getElementById('actualTill').textContent = actual.toFixed(2);
     document.getElementById('overShort').textContent = (actual - expected).toFixed(2);
   }
 
-  document.getElementById('tillCount').addEventListener('input', calcOverShort);
-
   async function submitCloseShift() {
-    const actual = parseFloat(document.getElementById('tillCount').value || 0);
+    const till_count = getTillCount("closing");
+    const actual = calculateTillTotal("closing");
     const res = await fetch('/api/shift/close', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actual_cash: actual })
+      body: JSON.stringify({ till_count })
     }).then(r => r.json());
 
     closeShiftModal.hide();

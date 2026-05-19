@@ -1,0 +1,271 @@
+{% extends "layout.html" %}
+{% block content %}
+{% include 'admin/_subnav.html' %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-1">Manage Flavors</h2>
+    <p class="text-muted mb-0">
+      These are POS flavor pump options. Active flavors appear in drink modals; inactive flavors stay saved but are hidden from the POS.
+    </p>
+  </div>
+  <button class="btn btn-secondary" onclick="clearFlavorForm()">Clear Form</button>
+</div>
+
+<div class="card p-3 mb-4 flavor-admin-card">
+  <h5 class="mb-3">Add / Edit Flavor</h5>
+
+  <input type="hidden" id="flavorId">
+
+  <div class="row g-3 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label" for="flavorName">Flavor Name</label>
+      <input id="flavorName" class="form-control" placeholder="e.g. Vanilla">
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label" for="flavorPrice">Price per Pump</label>
+      <div class="input-group">
+        <span class="input-group-text">$</span>
+        <input id="flavorPrice" type="number" step="0.01" min="0" class="form-control" value="0.25">
+      </div>
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label" for="flavorSort">Sort Order</label>
+      <input id="flavorSort" type="number" step="1" class="form-control" value="0">
+    </div>
+
+    <div class="col-md-1 d-flex align-items-center">
+      <div class="form-check mt-4">
+        <input id="flavorActive" class="form-check-input" type="checkbox" checked>
+        <label class="form-check-label" for="flavorActive">Active</label>
+      </div>
+    </div>
+
+    <div class="col-md-2">
+      <button id="saveFlavorBtn" class="btn btn-primary w-100" onclick="saveFlavor()">Save Flavor</button>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="mb-0">Flavor List</h5>
+    <span id="flavorCount" class="text-muted small"></span>
+  </div>
+
+  <div class="table-responsive">
+    <table id="flavors-table" class="table table-sm table-striped align-middle">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="text-end">Price / Pump</th>
+          <th class="text-end">Sort</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="flavorsTableBody">
+        <tr>
+          <td colspan="5" class="text-muted text-center">Loading flavors...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function fmtMoney(x) {
+  return `$${Number(x || 0).toFixed(2)}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function getFlavorPayload() {
+  const id = document.getElementById("flavorId").value;
+
+  return {
+    id: id ? Number(id) : null,
+    name: document.getElementById("flavorName").value.trim(),
+    price_per_pump: Math.max(0, Number(document.getElementById("flavorPrice").value || 0)),
+    sort_order: Number.parseInt(document.getElementById("flavorSort").value || "0", 10) || 0,
+    active: document.getElementById("flavorActive").checked ? 1 : 0
+  };
+}
+
+function clearFlavorForm() {
+  document.getElementById("flavorId").value = "";
+  document.getElementById("flavorName").value = "";
+  document.getElementById("flavorPrice").value = "0.25";
+  document.getElementById("flavorSort").value = "0";
+  document.getElementById("flavorActive").checked = true;
+  document.getElementById("saveFlavorBtn").textContent = "Save Flavor";
+  document.getElementById("flavorName").focus();
+}
+
+async function loadFlavors() {
+  const tbody = document.getElementById("flavorsTableBody");
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="5" class="text-muted text-center">Loading flavors...</td>
+    </tr>
+  `;
+
+  try {
+    const flavors = await fetch("/api/admin/flavors").then(r => r.json());
+    document.getElementById("flavorCount").textContent =
+      `${flavors.length} flavor${flavors.length === 1 ? "" : "s"}`;
+
+    if (!flavors.length) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="text-muted text-center">
+            No flavors yet. Add one above.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = "";
+
+    flavors.forEach(flavor => {
+      const tr = document.createElement("tr");
+      tr.className = Number(flavor.active || 0) === 1 ? "" : "flavor-inactive-row";
+
+      tr.innerHTML = `
+        <td>
+          <strong>${escapeHtml(flavor.name)}</strong>
+        </td>
+        <td class="text-end">${fmtMoney(flavor.price_per_pump)}</td>
+        <td class="text-end">${Number(flavor.sort_order || 0)}</td>
+        <td>
+          ${
+            Number(flavor.active || 0) === 1
+              ? `<span class="badge text-bg-success">Active</span>`
+              : `<span class="badge text-bg-secondary">Inactive</span>`
+          }
+        </td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-primary me-1" onclick='editFlavor(${JSON.stringify(flavor)})'>Edit</button>
+          <button class="btn btn-sm ${Number(flavor.active || 0) === 1 ? "btn-outline-secondary" : "btn-outline-success"} me-1"
+                  onclick='toggleFlavor(${JSON.stringify(flavor)})'>
+            ${Number(flavor.active || 0) === 1 ? "Deactivate" : "Activate"}
+          </button>
+          <button class="btn btn-sm btn-danger" onclick='deleteFlavor(${JSON.stringify(flavor)})'>Delete</button>
+        </td>
+      `;
+
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="text-danger text-center">
+          Could not load flavors: ${escapeHtml(err)}
+        </td>
+      </tr>
+    `;
+  }
+}
+
+function editFlavor(flavor) {
+  document.getElementById("flavorId").value = flavor.id;
+  document.getElementById("flavorName").value = flavor.name || "";
+  document.getElementById("flavorPrice").value = Number(flavor.price_per_pump ?? 0.25).toFixed(2);
+  document.getElementById("flavorSort").value = Number(flavor.sort_order || 0);
+  document.getElementById("flavorActive").checked = Number(flavor.active || 0) === 1;
+  document.getElementById("saveFlavorBtn").textContent = "Update Flavor";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function saveFlavor() {
+  const payload = getFlavorPayload();
+
+  if (!payload.name) {
+    alert("Enter a flavor name.");
+    return;
+  }
+
+  const url = payload.id ? "/api/admin/flavors/update" : "/api/admin/flavors/add";
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    }).then(r => r.json());
+
+    if (!res.ok) {
+      throw new Error(res.error || "Flavor save failed.");
+    }
+
+    clearFlavorForm();
+    loadFlavors();
+  } catch (err) {
+    alert("Could not save flavor: " + err.message);
+  }
+}
+
+async function toggleFlavor(flavor) {
+  const payload = {
+    ...flavor,
+    active: Number(flavor.active || 0) === 1 ? 0 : 1
+  };
+
+  try {
+    const res = await fetch("/api/admin/flavors/update", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    }).then(r => r.json());
+
+    if (!res.ok) {
+      throw new Error(res.error || "Flavor update failed.");
+    }
+
+    loadFlavors();
+  } catch (err) {
+    alert("Could not update flavor: " + err.message);
+  }
+}
+
+async function deleteFlavor(flavor) {
+  if (!confirm(`Delete flavor "${flavor.name}"?\n\nIf this flavor has been used on old receipts, prefer deactivating it instead.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/admin/flavors/delete", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ id: flavor.id })
+    }).then(r => r.json());
+
+    if (!res.ok) {
+      throw new Error(res.error || "Flavor delete failed.");
+    }
+
+    clearFlavorForm();
+    loadFlavors();
+  } catch (err) {
+    alert("Could not delete flavor: " + err.message);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadFlavors();
+});
+</script>
+
+<br>
+<br>
+{% endblock %}

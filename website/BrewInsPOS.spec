@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('backend', 'backend'), ('backend/pos.db', 'backend'), ('templates', 'templates'), ('static', 'static'), ('catalog_backup', 'catalog_backup'), ('SchoolCafe_POS.xlsx', '.'), ('icon.ico', '.')]
+datas = [('backend', 'backend'), ('backend/pos.db', 'backend'), ('templates', 'templates'), ('static', 'static'), ('catalog_backup', 'catalog_backup'), ('icon.ico', '.')]
 binaries = []
 hiddenimports = ['backend', 'backend.db_ops', 'backend.build_database', 'backend.backup_restore']
 tmp_ret = collect_all('backend')

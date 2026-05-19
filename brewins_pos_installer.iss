@@ -1,8 +1,8 @@
-[Setup]
+﻿[Setup]
 AppName=BrewIns POS
-AppVersion=2.0.0
+AppVersion=2.1.0
 DefaultDirName={localappdata}\BrewInsPOS
-OutputBaseFilename=BrewIns_POS_Setup
+OutputBaseFilename=BrewIns_POS_Setup_2.1.0
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=lowest
@@ -11,23 +11,21 @@ SetupIconFile=website\icon.ico
 
 [Files]
 ; Main app EXE
-Source: "website\release\BrewInsPOS_2.0.0.exe"; DestDir: "{app}"; DestName: "BrewInsPOS.exe"; Flags: ignoreversion
+Source: website\release\BrewInsPOS_2.1.0.exe; DestDir: {app}; DestName: BrewInsPOS.exe; Flags: ignoreversion
 ; Updater EXE
 Source: "website\release\updater.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Backend PY files
-Source: "website\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "website\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "pos.db;__pycache__\*;*.pyc"
 ; Database file
-Source: "website\backend\pos.db"; DestDir: "{app}\backend"; Flags: ignoreversion
+Source: "website\backend\pos.db"; DestDir: "{app}\backend"; Flags: onlyifdoesntexist
 ; SQL schema for resets/rebuild
 Source: "website\backend\models.sql"; DestDir: "{app}\backend"; Flags: ignoreversion
 ; Templates (HTML)
 Source: "website\templates\*"; DestDir: "{app}\templates"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Static assets (JS, CSS)
-Source: "website\static\*"; DestDir: "{app}\static"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "website\static\*"; DestDir: "{app}\static"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.py;__pycache__\*;*.pyc"
 ; Backup/restore utilities
 Source: "website\catalog_backup\*"; DestDir: "{app}\catalog_backup"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Excel file
-Source: "website\SchoolCafe_POS.xlsx"; DestDir: "{app}"; Flags: ignoreversion
 ; Icon
 Source: "website\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -41,3 +39,5 @@ Name: "{userdesktop}\BrewIns POS"; Filename: "{app}\BrewInsPOS.exe"; IconFilenam
 
 [Run]
 Filename: "{app}\BrewInsPOS.exe"; Description: "Launch BrewIns POS"; Flags: nowait postinstall runasoriginaluser
+
+

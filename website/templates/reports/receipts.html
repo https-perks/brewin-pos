@@ -140,14 +140,28 @@
               </tr>
             </thead>
             <tbody>
-              ${lines.map(ln => `
-                <tr>
-                  <td>${ln.item_name}</td>
-                  <td class="text-end">${ln.qty}</td>
-                  <td class="text-end">${fmtMoney(ln.unit_price)}</td>
-                  <td class="text-end">${fmtMoney(ln.line_total)}</td>
-                </tr>
-              `).join('')}
+              ${lines.map(ln => {
+                const modifiers = ln.modifiers || [];
+                const modifierHtml = modifiers.length ? `
+                  <div class="small text-muted mt-1">
+                    ${modifiers.map(m => `
+                      <div>+ ${m.name} x${m.qty} (${fmtMoney(m.line_total)})</div>
+                    `).join('')}
+                  </div>
+                ` : '';
+
+                return `
+                  <tr>
+                    <td>
+                      <div>${ln.item_name}</div>
+                      ${modifierHtml}
+                    </td>
+                    <td class="text-end">${ln.qty}</td>
+                    <td class="text-end">${fmtMoney(ln.unit_price)}</td>
+                    <td class="text-end">${fmtMoney(ln.line_total)}</td>
+                  </tr>
+                `;
+              }).join('')}
             </tbody>
           </table>
             ${discounts.length ? `

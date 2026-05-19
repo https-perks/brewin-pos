@@ -485,10 +485,18 @@ async function saveSettings() {
   const res = await fetch('/api/admin/settings/update', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    credentials: 'same-origin'
   }).then(r => r.json());
-
-  if (res.ok) alert("Settings saved.");
+  if (res.ok) {
+    alert("Settings saved.");
+    // If admin access lock was enabled, force a full navigation to the
+    // admin login so the browser receives the updated session cookie
+    // and the UI is re-locked immediately.
+    if (payload.require_pin_admin_access) {
+      window.location.href = '/admin/logout';
+    }
+  }
   else alert("Could not save settings.");
 }
 

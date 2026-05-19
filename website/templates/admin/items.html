@@ -4,8 +4,15 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="m-0">Manage Items</h2>
-  <button id="toggleEdit" class="btn btn-secondary btn-sm" onclick="toggleEditMode()">✏️ Edit Mode</button>
+  <div class="d-flex gap-2">
+    <button id="saveAllBtn" class="btn btn-success btn-sm d-none" onclick="saveAllItems()">💾 Save All Changes</button>
+    <button id="toggleEdit" class="btn btn-secondary btn-sm" onclick="toggleEditMode()">✏️ Edit Mode</button>
+  </div>
 </div>
+
+<datalist id="categoryOptions"></datalist>
+<datalist id="displayGroupOptions"></datalist>
+<datalist id="sizeOptions"></datalist>
 
 <div class="card p-3 mb-4">
   <h5>Add Item</h5>
@@ -16,15 +23,26 @@
         <input id="sku" placeholder="SKU" class="form-control">
       </div>
 
-      <div class="col-md-4">
-        <input id="name" placeholder="Item Name" class="form-control">
-      </div>
-
       <div class="col-md-3">
-        <input id="category" placeholder="Category" class="form-control">
+        <input id="name" placeholder="Item Name, e.g. Coffee 8oz" class="form-control">
       </div>
 
       <div class="col-md-2">
+        <input id="category" list="categoryOptions" placeholder="Category, e.g. Drinks" class="form-control mb-1">
+        <select id="categoryPicker" class="form-select form-select-sm" onchange="chooseCategory('category', this)">
+          <option value="">Choose existing...</option>
+        </select>
+      </div>
+
+      <div class="col-md-2">
+        <input id="displayGroup" list="displayGroupOptions" placeholder="Display Group, e.g. Coffee" class="form-control">
+      </div>
+
+      <div class="col-md-1">
+        <input id="sizeLabel" list="sizeOptions" placeholder="Size" class="form-control">
+      </div>
+
+      <div class="col-md-1">
         <input id="price" type="number" step="0.01" placeholder="Price" class="form-control">
       </div>
 
@@ -32,6 +50,10 @@
         <button class="btn btn-primary w-100">Add</button>
       </div>
     </div>
+
+    <small class="text-muted d-block mt-2">
+      Category controls the POS side menu. Display Group combines size variants into one POS button. Example: Coffee 8oz and Coffee 12oz both use Display Group “Coffee.”
+    </small>
   </form>
 </div>
 
@@ -47,6 +69,7 @@
 
 <script>
 let editMode = false;
+let currentItems = [];
 
 function fmtMoney(x) {
   return `$${Number(x || 0).toFixed(2)}`;
@@ -64,9 +87,75 @@ function marginClass(margin) {
   return "text-success fw-bold";
 }
 
+function esc(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function uniqueSorted(values) {
+  return [...new Set(
+    values
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
+}
+
+function updateDatalist(id, values) {
+  const list = document.getElementById(id);
+  if (!list) return;
+
+  list.innerHTML = '';
+
+  uniqueSorted(values).forEach(value => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    list.appendChild(opt);
+  });
+}
+
+function updateCategoryPicker(values) {
+  const picker = document.getElementById('categoryPicker');
+  if (!picker) return;
+
+  const previous = picker.value;
+  picker.innerHTML = '<option value="">Choose existing...</option>';
+
+  uniqueSorted(values).forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = cat;
+    picker.appendChild(opt);
+  });
+
+  picker.value = previous;
+}
+
+function chooseCategory(inputId, selectEl) {
+  if (!selectEl.value) return;
+
+  const input = document.getElementById(inputId);
+  if (input) input.value = selectEl.value;
+
+  selectEl.value = '';
+}
+
+function updateItemSuggestions(items) {
+  const categories = items.map(it => it.category);
+
+  updateDatalist('categoryOptions', categories);
+  updateCategoryPicker(categories);
+  updateDatalist('displayGroupOptions', items.map(it => it.display_group || it.name));
+  updateDatalist('sizeOptions', items.map(it => it.size_label).concat(['8oz', '12oz', '16oz']));
+}
+
 function toggleEditMode(){
   editMode = !editMode;
   document.getElementById('toggleEdit').innerText = editMode ? '✅ Done Editing' : '✏️ Edit Mode';
+  document.getElementById('saveAllBtn').classList.toggle('d-none', !editMode);
   loadItems();
 }
 
@@ -74,12 +163,17 @@ function loadItems(){
   fetch('/api/items')
     .then(r=>r.json())
     .then(items=>{
+      currentItems = items;
+      updateItemSuggestions(items);
+
       let html = `
         <thead>
           <tr>
             <th>SKU</th>
             <th>Name</th>
             <th>Category</th>
+            <th>Display Group</th>
+            <th>Size</th>
             <th class="text-end">Price</th>
             <th class="text-end">Cost</th>
             <th class="text-end">Gross Profit</th>
@@ -98,10 +192,14 @@ function loadItems(){
 
         if(editMode){
           html += `
-            <tr>
-              <td>${it.sku || ''}</td>
-              <td><input class="form-control form-control-sm" id="name-${it.id}" value="${it.name || ''}"></td>
-              <td><input class="form-control form-control-sm" id="cat-${it.id}" value="${it.category || ''}"></td>
+            <tr data-item-id="${it.id}">
+              <td>${esc(it.sku || '')}</td>
+              <td><input class="form-control form-control-sm" id="name-${it.id}" value="${esc(it.name || '')}"></td>
+              <td>
+                <input class="form-control form-control-sm mb-1" list="categoryOptions" id="cat-${it.id}" value="${esc(it.category || '')}">
+              </td>
+              <td><input class="form-control form-control-sm" list="displayGroupOptions" id="group-${it.id}" value="${esc(it.display_group || '')}"></td>
+              <td><input class="form-control form-control-sm" list="sizeOptions" id="size-${it.id}" value="${esc(it.size_label || '')}"></td>
               <td><input type="number" step="0.01" class="form-control form-control-sm text-end" id="price-${it.id}" value="${price}"></td>
               <td class="text-end">${fmtMoney(cost)}</td>
               <td class="text-end">${fmtMoney(grossProfit)}</td>
@@ -114,9 +212,11 @@ function loadItems(){
         } else {
           html += `
             <tr>
-              <td>${it.sku || ''}</td>
-              <td>${it.name || ''}</td>
-              <td>${it.category || ''}</td>
+              <td>${esc(it.sku || '')}</td>
+              <td>${esc(it.name || '')}</td>
+              <td>${esc(it.category || '')}</td>
+              <td>${esc(it.display_group || '')}</td>
+              <td>${esc(it.size_label || '')}</td>
               <td class="text-end">${fmtMoney(price)}</td>
               <td class="text-end">${fmtMoney(cost)}</td>
               <td class="text-end">${fmtMoney(grossProfit)}</td>
@@ -130,19 +230,60 @@ function loadItems(){
     });
 }
 
-function saveItem(id){
-  const payload = {
+function getItemPayload(id){
+  return {
     id: id,
     name: document.getElementById('name-'+id).value.trim(),
     category: document.getElementById('cat-'+id).value.trim(),
+    display_group: document.getElementById('group-'+id).value.trim(),
+    size_label: document.getElementById('size-'+id).value.trim(),
     price: parseFloat(document.getElementById('price-'+id).value||0)
   };
+}
+
+function saveItem(id){
+  const payload = getItemPayload(id);
 
   fetch('/api/admin/update_item',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(payload)
   }).then(()=>loadItems());
+}
+
+async function saveAllItems(){
+  if (!editMode) return;
+
+  const ids = currentItems.map(it => it.id);
+  const saveBtn = document.getElementById('saveAllBtn');
+  const originalText = saveBtn.innerText;
+
+  saveBtn.disabled = true;
+  saveBtn.innerText = 'Saving...';
+
+  try {
+    for (const id of ids) {
+      const payload = getItemPayload(id);
+
+      const res = await fetch('/api/admin/update_item',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to save item #${id}`);
+      }
+    }
+
+    alert('All item changes saved.');
+    loadItems();
+  } catch (err) {
+    alert('Could not save all changes: ' + err.message);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerText = originalText;
+  }
 }
 
 function deleteItem(id){
@@ -159,12 +300,16 @@ function addItem(){
   const skuField = document.getElementById('sku');
   const nameField = document.getElementById('name');
   const categoryField = document.getElementById('category');
+  const displayGroupField = document.getElementById('displayGroup');
+  const sizeLabelField = document.getElementById('sizeLabel');
   const priceField = document.getElementById('price');
 
   const payload = {
     sku: skuField.value.trim(),
     name: nameField.value.trim(),
     category: categoryField.value.trim(),
+    display_group: displayGroupField.value.trim(),
+    size_label: sizeLabelField.value.trim(),
     price: parseFloat(priceField.value || 0)
   };
 
@@ -181,6 +326,8 @@ function addItem(){
     skuField.value = '';
     nameField.value = '';
     categoryField.value = '';
+    displayGroupField.value = '';
+    sizeLabelField.value = '';
     priceField.value = '';
     loadItems();
   });
